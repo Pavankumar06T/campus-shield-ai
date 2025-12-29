@@ -10,9 +10,10 @@ export const ProtectedRoute = ({ children, allowedRole }) => {
 
  return children;
 }; 
-*/
 
-// Temporary test: Just show the page
+
+/* Temporary test: Just show the page
 export const ProtectedRoute = ({ children }) => {
   return children; 
 };
+*/
