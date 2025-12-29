@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Campus Shield - Admin Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        .card { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { color: #4285F4; } /* Google Blue */
+        .alert { color: #db4437; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🛡️ Admin Dashboard (Data Test)</h1>
+
+    <div class="card">
+        <h2>Campust Stats</h2>
+        <p>Total Students: <span id="totalStudents">Loading...</span></p>
+        <p>Active Emergencies: <span id="activeEmergencies" class="alert">Loading...</span></p>
+        <p>High Stress Students: <span id="stressCount">Loading...</span></p>
+        <button onclick="fetchStats()">Refresh Stats</button>
+    </div>
+
+    <div class="card">
+        <h2>⚠️ At-Risk Students (AI Analysis)</h2>
+        <ul id="riskList"></ul>
+        <button onclick="fetchRisk()">Load Data</button>
+    </div>
+
+    <script>
+        // MOCK TOKEN - In real app, Member 3 handles login to get this
+        const ADMIN_TOKEN = "Bearer YOUR_TEST_TOKEN_HERE"; 
+        const API_URL = "http://localhost:3000/api/admin";
+
+        async function fetchStats() {
+            try {
+                const res = await fetch(`${API_URL}/stats`, {
+                    headers: { 'Authorization': ADMIN_TOKEN }
+                });
+                const data = await res.json();
+                document.getElementById('totalStudents').innerText = data.totalStudents;
+                document.getElementById('activeEmergencies').innerText = data.activeEmergencies;
+                document.getElementById('stressCount').innerText = data.highStressStudents;
+            } catch (err) { console.error(err); }
+        }
+
+        async function fetchRisk() {
+            try {
+                const res = await fetch(`${API_URL}/at-risk`, {
+                    headers: { 'Authorization': ADMIN_TOKEN }
+                });
+                const data = await res.json();
+                const list = document.getElementById('riskList');
+                list.innerHTML = '';
+                data.forEach(student => {
+                    const li = document.createElement('li');
+                    li.innerText = `${student.name} - Stress Score: ${student.stressScore}`;
+                    list.appendChild(li);
+                });
+            } catch (err) { console.error(err); }
+        }
+    </script>
+</body>
+</html>
