@@ -15,6 +15,7 @@ app.use(express.json());
 // Use Routes
 
 app.use('/api/admin', adminRoutes); 
-app.use('api/student',studentRoutes);
+app.use('/api/student',studentRoutes);
 
-module.exports = app;
+app.listen();
+//module.exports = app;

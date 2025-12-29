@@ -8,10 +8,11 @@ const { checkStudent } = require('../middleware/role.middleware');
 studentRouter.use(verifyToken);
 studentRouter.use(checkStudent);
 
-//studentRouter.get(...,studentController);
-//studentRouter.get(...,studentController);
-//studentRouter.get(...,studentController);
 
+// Routes
+studentRouter.post('/checkin', studentController.submitCheckIn);
+studentRouter.post('/chat', studentController.handleChat);
+studentRouter.post('/emergency', studentController.reportEmergency);
 
 
 module.exports = studentRouter;
