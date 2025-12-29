@@ -3,16 +3,18 @@ const app = express();
 const cors = require('cors');
 
 // Import Routes
-const authRoutes = require('./routes/auth.routes');
-const emergencyRoutes = require('./routes/emergency.routes');
-const adminRoutes = require('./routes/admin.routes'); // <--- PAVAN ADD THIS
+const studentRoutes = require('./routes/student.routes');
+const adminRoutes = require('./routes/admin.routes'); 
 
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://campus-shield-ai.web.app'] // Add your Firebase URL here
+}));
+
 app.use(express.json());
 
 // Use Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/emergency', emergencyRoutes);
-app.use('/api/admin', adminRoutes); // <--- PAVAN ADD THIS: This activates your code!
+
+app.use('/api/admin', adminRoutes); 
+app.use('api/student',studentRoutes);
 
 module.exports = app;

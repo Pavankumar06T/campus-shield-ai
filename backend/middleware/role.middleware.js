@@ -6,6 +6,15 @@ const checkAdmin = (req, res, next) => {
   } else {
     return res.status(403).json({ message: "Access denied. Admins only." });
   }
-};
 
-module.exports = { checkAdmin };
+};
+const checkStudent = (req, res, next) => {
+ 
+  if (req.user && req.user.role === 'student') {
+    next();
+  } else {
+    return res.status(403).json({ message: "Access denied. Students only." });
+  }
+
+};
+module.exports = { checkAdmin ,checkStudent };

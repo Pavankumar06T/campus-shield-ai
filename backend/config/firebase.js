@@ -1,11 +1,17 @@
-const admin = require("firebase-admin");
-const serviceAccount = require("../serviceAccountKey.json"); // You will get this file from Member 3
+const admin = require('firebase-admin');
+require('dotenv').config();
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://YOUR-PROJECT-ID.firebaseio.com"
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      project_id: process.env.FIREBASE_PROJECT_ID,
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
 
 const db = admin.firestore();
-module.exports = { admin, db };
+const auth = admin.auth();
+
+module.exports = { admin, db, auth };

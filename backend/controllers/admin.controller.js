@@ -6,7 +6,6 @@ exports.getDashboardStats = async (req, res) => {
     const studentsSnapshot = await db.collection('users').where('role', '==', 'student').get();
     const alertsSnapshot = await db.collection('emergencies').where('status', '==', 'active').get();
     
-    // Simple logic to count high stress students
     let highStressCount = 0;
     studentsSnapshot.forEach(doc => {
       if (doc.data().stressScore > 75) highStressCount++;
