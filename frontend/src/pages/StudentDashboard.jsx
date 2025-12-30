@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { useTheme } from '../components/ThemeContext';
-import { auth } from '../firebase';
+import { apiRequest } from '../api'; 
+import { auth, db } from '../firebase'; // Import DB
 import { signOut } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; // Import Firestore functions
 import { useNavigate } from 'react-router-dom';
 import { 
   MessageCircle, Phone, LogOut, Activity, ArrowRight, ShieldCheck, 
-  Sun, Moon, CloudSun, Sparkles, Zap, Quote, Heart 
+  Sun, Moon, CloudSun, Sparkles, Zap, Quote
 } from 'lucide-react';
 
 const StudentDashboard = () => {
@@ -16,8 +18,8 @@ const StudentDashboard = () => {
   
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [greeting, setGreeting] = useState("Good Morning");
-  const [streak, setStreak] = useState(1); // Streak State
-  const LOGO_URL = "/logo.png";
+  const [streak, setStreak] = useState(1); 
+  const [studentProfile, setStudentProfile] = useState(null);
 
   // Form Data
   const [mood, setMood] = useState(3);
@@ -25,40 +27,38 @@ const StudentDashboard = () => {
   const [sleep, setSleep] = useState(3);
   const [academic, setAcademic] = useState(3);
   const [social, setSocial] = useState(3);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    // 1. Time Logic
+    // 1. Set Greeting
     const hour = new Date().getHours();
     if (hour < 12) setGreeting("Good Morning");
     else if (hour < 18) setGreeting("Good Afternoon");
     else setGreeting("Good Evening");
 
-    // 2. REAL STREAK LOGIC
+    // 2. Load Student Profile from Local Storage (Saved during Login)
+    const storedProfile = localStorage.getItem('studentProfile');
+    if (storedProfile) {
+        setStudentProfile(JSON.parse(storedProfile));
+    }
+
+    // 3. Streak Logic
     const checkStreak = () => {
       const today = new Date().toDateString();
       const lastLogin = localStorage.getItem('lastLoginDate');
       const currentStreak = parseInt(localStorage.getItem('mindCareStreak') || '0');
 
-      if (lastLogin === today) {
-        // Already logged in today, keep streak
-        setStreak(currentStreak || 1);
-      } else {
-        // Check if yesterday was the last login
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        if (lastLogin === yesterday.toDateString()) {
-          // Continuous streak!
-          const newStreak = currentStreak + 1;
-          setStreak(newStreak);
-          localStorage.setItem('mindCareStreak', newStreak.toString());
+      if (lastLogin !== today) {
+        if (lastLogin === new Date(Date.now() - 86400000).toDateString()) {
+           setStreak(currentStreak + 1);
+           localStorage.setItem('mindCareStreak', (currentStreak + 1).toString());
         } else {
-          // Broken streak or first time
-          setStreak(1);
-          localStorage.setItem('mindCareStreak', '1');
+           setStreak(1);
+           localStorage.setItem('mindCareStreak', '1');
         }
-        // Save today as last login
         localStorage.setItem('lastLoginDate', today);
+      } else {
+        setStreak(currentStreak || 1);
       }
     };
     checkStreak();
@@ -66,22 +66,68 @@ const StudentDashboard = () => {
 
   const handleLogout = async () => {
     await signOut(auth);
+    localStorage.removeItem('studentProfile'); // Clear profile on logout
     navigate('/');
+  };
+
+  // --- SOS FUNCTIONALITY ---
+  const handleSOSClick = async () => {
+    if (!window.confirm("ARE YOU SURE? This will send your location and details to the Admin immediately.")) {
+        return;
+    }
+
+    try {
+        // Send Critical Alert to Firebase with Student Details
+        await addDoc(collection(db, "safety_alerts"), {
+            message: "CRITICAL SOS BUTTON PRESSED",
+            status: "SOS",
+            timestamp: serverTimestamp(),
+            // Attach details from Profile
+            student: studentProfile?.displayName || user?.displayName || "Unknown Student",
+            email: user?.email,
+            department: studentProfile?.department || "N/A",
+            year: studentProfile?.year || "N/A",
+            section: studentProfile?.section || "N/A"
+        });
+
+        alert("🚨 SOS ALERT SENT! Admin has been notified.");
+        navigate('/emergency'); // Go to emergency page for numbers/location
+
+    } catch (error) {
+        console.error("SOS Error:", error);
+        alert("Error sending alert. Please call emergency services manually.");
+        navigate('/emergency');
+    }
+  };
+
+  const handleSubmitCheckIn = async () => {
+    setSubmitting(true);
+    try {
+      await apiRequest('/student/checkin', 'POST', {
+        mood, stress, sleep, academic, social
+      });
+      alert("Check-in saved!");
+      setShowCheckIn(false);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to save check-in.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <div className={`min-h-screen relative font-sans transition-colors duration-500 overflow-x-hidden ${darkMode ? 'bg-[#0B1120] text-white' : 'bg-[#F0F4F8] text-slate-900'}`}>
       
-      {/* 1. ANIMATED BACKGROUND BLOBS */}
+      {/* Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
         <div className={`absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full blur-[100px] opacity-40 animate-pulse ${darkMode ? 'bg-blue-900' : 'bg-blue-200'}`}></div>
         <div className={`absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full blur-[100px] opacity-40 animate-pulse delay-1000 ${darkMode ? 'bg-purple-900' : 'bg-purple-200'}`}></div>
       </div>
 
-      {/* 2. GLASS NAVBAR */}
       <nav className={`px-6 py-4 flex justify-between items-center sticky top-4 mx-4 rounded-2xl z-50 backdrop-blur-xl border shadow-sm transition-all ${darkMode ? 'bg-slate-900/60 border-slate-700/50' : 'bg-white/60 border-white/50'}`}>
         <div className="font-extrabold text-xl tracking-tight flex items-center gap-3">
-          <img src={LOGO_URL} alt="Logo" className="w-8 h-8 rounded-full shadow-sm" />
+          <ShieldCheck className="text-blue-600" />
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">MindCare</span>
         </div>
         
@@ -97,49 +143,32 @@ const StudentDashboard = () => {
 
       <div className="max-w-6xl mx-auto p-6 pt-8 pb-20">
         
-        {/* 3. HERO SECTION */}
+        {/* Header */}
         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
           <div>
             <div className="flex items-center gap-2 mb-2">
                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${darkMode ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
                  Student Portal
                </span>
-               {/* DYNAMIC STREAK DISPLAY */}
                <span className="flex items-center gap-1 text-xs font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded-full border border-amber-500/20">
                  <Zap size={14} fill="currentColor"/> {streak} Day Streak!
                </span>
             </div>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2">
-              {greeting}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600">{user?.displayName?.split(' ')[0]}</span>
+              {greeting}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600">{studentProfile?.displayName || user?.displayName?.split(' ')[0]}</span>
             </h1>
             <p className={`text-lg font-medium ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              Your mental wellness journey continues here.
+              Department: {studentProfile?.department || "General"} | Year: {studentProfile?.year || "-"}
             </p>
-          </div>
-          
-          {/* Daily Quote Card */}
-          <div className={`p-4 rounded-2xl border max-w-sm backdrop-blur-md ${darkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-white/50 border-white shadow-sm'}`}>
-             <div className="flex gap-3">
-                <div className="p-2 bg-amber-100 text-amber-600 rounded-lg h-fit"><Quote size={16}/></div>
-                <div>
-                   <p className={`text-sm italic mb-1 ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>"Believe you can and you're halfway there."</p>
-                   <p className="text-xs font-bold text-slate-400">- Theodore Roosevelt</p>
-                </div>
-             </div>
           </div>
         </header>
 
-        {/* 4. BENTO GRID LAYOUT */}
+        {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           
-          {/* A. AI COMPANION (Large Card) */}
-          <div 
-             onClick={() => navigate('/student/chat')}
-             className="md:col-span-7 relative group cursor-pointer overflow-hidden rounded-[2.5rem] bg-[#2563EB] text-white shadow-xl shadow-blue-500/20 transition-all duration-300 hover:shadow-2xl hover:scale-[1.01]"
-          >
-            {/* Background Decoration */}
+          {/* AI Companion Card */}
+          <div onClick={() => navigate('/student/chat')} className="md:col-span-7 relative group cursor-pointer overflow-hidden rounded-[2.5rem] bg-[#2563EB] text-white shadow-xl shadow-blue-500/20 transition-all duration-300 hover:shadow-2xl hover:scale-[1.01]">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 transition-transform group-hover:scale-110 duration-700"></div>
-            
             <div className="p-10 h-full flex flex-col justify-between relative z-10">
                <div>
                   <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-white/10 shadow-inner">
@@ -150,14 +179,7 @@ const StudentDashboard = () => {
                     Feeling overwhelmed? Chat privately with your 24/7 AI wellness assistant.
                   </p>
                </div>
-               
                <div className="flex items-center justify-between mt-8">
-                  <div className="flex -space-x-2">
-                     {[1,2,3].map(i => (
-                        <div key={i} className="w-8 h-8 rounded-full border-2 border-blue-600 bg-blue-400/30 backdrop-blur-sm"></div>
-                     ))}
-                     <div className="w-8 h-8 rounded-full border-2 border-blue-600 bg-white/20 flex items-center justify-center text-[10px] font-bold">+</div>
-                  </div>
                   <button className="flex items-center gap-2 bg-white text-blue-600 px-6 py-3 rounded-full font-bold text-sm shadow-lg hover:bg-blue-50 transition-colors">
                     Start Chat <ArrowRight size={16}/>
                   </button>
@@ -165,7 +187,7 @@ const StudentDashboard = () => {
             </div>
           </div>
 
-          {/* B. CHECK-IN (Medium Card) */}
+          {/* CHECK-IN CARD */}
           <div className={`md:col-span-5 relative overflow-hidden rounded-[2.5rem] border shadow-lg transition-all duration-300 flex flex-col ${darkMode ? 'bg-slate-800/50 border-slate-700 hover:bg-slate-800' : 'bg-white border-white hover:border-blue-100 shadow-slate-200/50'}`}>
              {!showCheckIn ? (
                 <div className="p-8 h-full flex flex-col justify-between">
@@ -181,11 +203,8 @@ const StudentDashboard = () => {
                         Track your mood & stress to unlock insights.
                       </p>
                    </div>
-                   <button 
-                     onClick={() => setShowCheckIn(true)} 
-                     className="w-full py-4 mt-6 bg-[#0D9488] text-white font-bold rounded-2xl shadow-lg shadow-teal-500/20 hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                   >
-                     Log Today's Mood <Sparkles size={18}/>
+                   <button onClick={() => setShowCheckIn(true)} className="w-full py-4 mt-6 bg-[#0D9488] text-white font-bold rounded-2xl shadow-lg shadow-teal-500/20 hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                      Log Today's Mood <Sparkles size={18}/>
                    </button>
                 </div>
              ) : (
@@ -195,36 +214,37 @@ const StudentDashboard = () => {
                       <button onClick={() => setShowCheckIn(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600">CANCEL</button>
                    </div>
                    <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                      <Slider label="Stress" value={stress} setValue={setStress} min="Chill" max="Panic" color="text-emerald-500" darkMode={darkMode}/>
-                      <Slider label="Sleep" value={sleep} setValue={setSleep} min="Bad" max="Good" color="text-blue-500" darkMode={darkMode}/>
-                      <Slider label="Social" value={social} setValue={setSocial} min="Low" max="High" color="text-purple-500" darkMode={darkMode}/>
+                      <Slider label="Stress Level" value={stress} setValue={setStress} min="Low" max="High" color="text-emerald-500" darkMode={darkMode}/>
+                      <Slider label="Sleep Quality" value={sleep} setValue={setSleep} min="Bad" max="Good" color="text-blue-500" darkMode={darkMode}/>
+                      <Slider label="Social Activity" value={social} setValue={setSocial} min="Low" max="High" color="text-purple-500" darkMode={darkMode}/>
                    </div>
-                   <button onClick={() => setShowCheckIn(false)} className={`w-full py-3 mt-4 font-bold rounded-xl ${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-900 text-white hover:bg-black'}`}>
-                      Save Entry
+                   <button 
+                     onClick={handleSubmitCheckIn} 
+                     disabled={submitting}
+                     className={`w-full py-3 mt-4 font-bold rounded-xl transition ${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-900 text-white hover:bg-black'}`}
+                   >
+                      {submitting ? "Saving..." : "Save Entry"}
                    </button>
                 </div>
              )}
           </div>
 
-          {/* C. SOS BUTTON (Full Width) */}
+          {/* SOS BUTTON - NOW CONNECTED TO FIREBASE */}
           <div className="md:col-span-12">
-             <button 
-                onClick={() => navigate('/emergency')} 
-                className="w-full group relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-red-500 to-rose-600 p-1 shadow-xl shadow-red-500/20 transition-all hover:scale-[1.01] hover:shadow-2xl hover:shadow-red-500/30"
-             >
+             <button onClick={handleSOSClick} className="w-full group relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-red-500 to-rose-600 p-1 shadow-xl shadow-red-500/20 transition-all hover:scale-[1.01]">
                 <div className={`relative flex items-center justify-between rounded-[1.8rem] px-8 py-6 transition-all ${darkMode ? 'bg-slate-900/90 group-hover:bg-slate-900/0' : 'bg-white group-hover:bg-white/10'}`}>
                    <div className="flex items-center gap-6">
-                      <div className={`flex h-16 w-16 items-center justify-center rounded-2xl transition-colors ${darkMode ? 'bg-red-500/20 text-red-400 group-hover:bg-white/20 group-hover:text-white' : 'bg-red-50 text-red-500 group-hover:bg-white/20 group-hover:text-white'}`}>
+                      <div className={`flex h-16 w-16 items-center justify-center rounded-2xl transition-colors ${darkMode ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-500'}`}>
                          <Phone className="h-8 w-8 animate-pulse" />
                       </div>
                       <div className="text-left">
                          <h3 className={`text-2xl font-bold transition-colors ${darkMode ? 'text-white' : 'text-slate-900 group-hover:text-white'}`}>Emergency SOS</h3>
                          <p className={`font-medium transition-colors ${darkMode ? 'text-slate-400 group-hover:text-red-100' : 'text-slate-500 group-hover:text-red-100'}`}>
-                            Immediate help • Live Location • 24/7 Support
+                           Click to send Alert with Location & Details
                          </p>
                       </div>
                    </div>
-                   <div className="hidden md:flex h-12 w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm transition-transform group-hover:rotate-45">
+                   <div className="hidden md:flex h-12 w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                       <ArrowRight className="text-white" />
                    </div>
                 </div>
@@ -237,7 +257,7 @@ const StudentDashboard = () => {
   );
 };
 
-// Mini Slider Component
+// Simple Slider
 const Slider = ({ label, value, setValue, min, max, color, darkMode }) => (
   <div>
     <div className="flex justify-between mb-2 text-xs font-bold uppercase tracking-wide">

@@ -1,340 +1,481 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../components/AuthContext';
-import { useTheme } from '../components/ThemeContext';
-import { auth } from '../firebase';
-import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Bell, LogOut, AlertTriangle, Activity, Lock, Sun, Moon, 
-  ShieldAlert, Users, Search, MoreVertical, ChevronRight, TrendingUp, Clock 
+  BarChart, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
+} from 'recharts';
+import { 
+  ShieldAlert, CheckCircle, Bell, User, Mail, Activity, Lock, Loader, LogOut, Moon, Sun, Siren, 
+  LayoutDashboard, History, Menu, ChevronRight, Info, X, GraduationCap, Building, BookOpen, MessageSquare, AlertTriangle
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-// Modern Smooth Data
-const stressData = [
-  { name: 'Mon', stress: 2.4 }, { name: 'Tue', stress: 3.1 }, { name: 'Wed', stress: 4.5 },
-  { name: 'Thu', stress: 3.8 }, { name: 'Fri', stress: 4.2 }, { name: 'Sat', stress: 2.1 },
-  { name: 'Sun', stress: 2.8 },
-];
+import { db, auth } from '../firebase';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, serverTimestamp, where } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
+
+// --- HELPER: Highlight Risk Keywords ---
+const HighlightRisk = ({ text }) => {
+  if (!text) return null;
+  const riskWords = ["kill", "die", "hurt", "bully", "scared", "attack", "suicide", "ragging", "harass", "bomb", "weapon", "blood"];
+  
+  const parts = text.split(new RegExp(`(${riskWords.join('|')})`, 'gi'));
+
+  return (
+    <span>
+      {parts.map((part, i) => 
+        riskWords.some(w => w.toLowerCase() === part.toLowerCase()) ? (
+          <span key={i} className="bg-yellow-300 text-red-900 font-bold px-1 rounded mx-0.5 border border-yellow-500">
+            {part}
+          </span>
+        ) : (
+          part
+        )
+      )}
+    </span>
+  );
+};
 
 const AdminDashboard = () => {
-  const { user } = useAuth();
-  const { darkMode, toggleTheme } = useTheme();
-  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('dashboard'); 
+  const [alerts, setAlerts] = useState([]);
+  const [studentCount, setStudentCount] = useState(0); // <--- NEW STATE FOR LIVE COUNT
+  const [stats, setStats] = useState({ safe: 0, dangerous: 0, resolved: 0, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  const [activeTab, setActiveTab] = useState('overview'); 
-  const LOGO_URL = "/logo.png"; 
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  
+  const navigate = useNavigate();
 
+  // --- 1. LISTEN TO ALERTS (CHATS/SOS) ---
+  useEffect(() => {
+    const q = query(collection(db, "safety_alerts"), orderBy("timestamp", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const realData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        timestampFormatted: doc.data().timestamp?.toDate 
+          ? doc.data().timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) 
+          : 'Just now'
+      }));
+      setAlerts(realData);
+      
+      const safe = realData.filter(a => a.status === 'Safe').length;
+      const dangerous = realData.filter(a => ['Dangerous', 'SOS', 'Critical'].includes(a.status)).length;
+      const resolved = realData.filter(a => a.status === 'Resolved').length;
+      
+      setStats({ safe, dangerous, resolved, total: realData.length });
+      setLoading(false);
+    }, (error) => console.error(error));
+    return () => unsubscribe();
+  }, []);
+
+  // --- 2. NEW: LISTEN TO REGISTERED STUDENTS COUNT ---
+  useEffect(() => {
+    // Queries the "users" collection where role is 'student'
+    const q = query(collection(db, "users"), where("role", "==", "student"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        setStudentCount(snapshot.size); // The .size property gives the live count
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- ACTIONS ---
   const handleLogout = async () => {
-    try { await signOut(auth); navigate('/'); } catch (error) { console.error("Logout Error:", error); }
+    await signOut(auth);
+    navigate('/');
   };
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'overview': return <OverviewTab darkMode={darkMode} />;
-      case 'students': return <StudentsTab darkMode={darkMode} />;
-      case 'emergencies': return <EmergenciesTab darkMode={darkMode} />;
-      default: return <OverviewTab darkMode={darkMode} />;
+  const toggleTheme = () => {
+    setDarkMode(!darkMode);
+    document.documentElement.classList.toggle('dark');
+  };
+
+  const handleResolve = async (id) => {
+    if(window.confirm("Mark this as Resolved? It will move to History.")) {
+      try {
+        const alertRef = doc(db, "safety_alerts", id);
+        await updateDoc(alertRef, {
+          status: "Resolved",
+          resolvedAt: serverTimestamp()
+        });
+      } catch (err) {
+        console.error("Error resolving:", err);
+      }
     }
   };
 
+  // --- FILTERS ---
+  const criticalAlerts = alerts.filter(a => ['Dangerous', 'SOS', 'Critical'].includes(a.status));
+  const forumFeed = alerts.filter(a => a.status !== 'Resolved'); 
+  const historyAlerts = alerts.filter(a => a.status === 'Resolved');
+  const criticalCount = criticalAlerts.length;
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900"><Loader className="animate-spin text-blue-600" size={40} /></div>;
+
   return (
-    <div className={`min-h-screen flex font-sans transition-colors duration-500 ${darkMode ? 'bg-[#0B1120]' : 'bg-[#F1F5F9]'}`}>
+    <div className={`min-h-screen flex transition-colors duration-300 font-sans ${darkMode ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-800'}`}>
       
-      {/* 1. MODERN SIDEBAR (Glassy Dark) */}
-      <aside className={`w-72 hidden md:flex flex-col border-r transition-colors duration-300 ${darkMode ? 'bg-[#0F172A]/90 border-slate-800' : 'bg-white border-slate-200'} backdrop-blur-xl z-20`}>
-        <div className="p-8 pb-4">
-          <div className="flex items-center gap-3 mb-8">
-            <img src={LOGO_URL} alt="Logo" className="w-10 h-10 rounded-xl shadow-lg shadow-blue-500/20" />
-            <div>
-               <h1 className={`font-extrabold text-xl tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>MindCare</h1>
-               <span className="text-[10px] font-bold uppercase tracking-widest text-teal-500">Admin Control</span>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <p className={`text-xs font-bold uppercase tracking-wider pl-3 mb-2 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Menu</p>
-            <NavItem icon={<LayoutDashboard size={20}/>} text="Dashboard" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} darkMode={darkMode} />
-            <NavItem icon={<Users size={20}/>} text="Student Directory" active={activeTab === 'students'} onClick={() => setActiveTab('students')} darkMode={darkMode} />
-            <NavItem icon={<Bell size={20}/>} text="Live Alerts" badge="2" active={activeTab === 'emergencies'} onClick={() => setActiveTab('emergencies')} darkMode={darkMode} />
-          </div>
+      {/* SIDEBAR */}
+      <aside className={`fixed z-30 inset-y-0 left-0 bg-white dark:bg-gray-800 shadow-xl transition-all duration-300 flex flex-col ${sidebarOpen ? 'w-64' : 'w-20'}`}>
+        <div className="h-20 flex items-center justify-center border-b border-gray-100 dark:border-gray-700">
+           {sidebarOpen ? (
+             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 flex items-center gap-2">
+               <ShieldAlert className="text-blue-600" /> Admin
+             </h1>
+           ) : (
+             <ShieldAlert className="text-blue-600" size={30} />
+           )}
         </div>
 
-        <div className="mt-auto p-6 border-t border-dashed border-slate-700/30">
-          <button onClick={handleLogout} className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-300 group ${darkMode ? 'hover:bg-red-500/10 text-slate-400 hover:text-red-400' : 'hover:bg-red-50 text-slate-500 hover:text-red-600'}`}>
-            <LogOut size={20} className="group-hover:-translate-x-1 transition-transform"/> 
-            <span className="font-medium">Sign Out</span>
-          </button>
+        <nav className="flex-1 py-6 px-3 space-y-2">
+          <SidebarItem icon={LayoutDashboard} label="Overview" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} open={sidebarOpen} />
+          <SidebarItem icon={Siren} label="Live Alerts" active={activeTab === 'alerts'} onClick={() => setActiveTab('alerts')} open={sidebarOpen} badge={criticalCount} color="text-red-500" />
+          <SidebarItem icon={MessageSquare} label="Forum Feed" active={activeTab === 'forum'} onClick={() => setActiveTab('forum')} open={sidebarOpen} color="text-blue-500" />
+          <SidebarItem icon={History} label="History Log" active={activeTab === 'history'} onClick={() => setActiveTab('history')} open={sidebarOpen} />
+        </nav>
+
+        <div className="p-4 border-t border-gray-100 dark:border-gray-700">
+           <button onClick={handleLogout} className={`flex items-center gap-3 w-full p-3 rounded-xl transition-colors hover:bg-red-50 text-red-600 dark:hover:bg-red-900/20 ${!sidebarOpen && 'justify-center'}`}>
+              <LogOut size={20} />
+              {sidebarOpen && <span className="font-semibold">Sign Out</span>}
+           </button>
         </div>
       </aside>
 
-      {/* 2. MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-y-auto h-screen relative">
-        {/* Decorative Grid Background */}
-        <div className={`absolute inset-0 pointer-events-none opacity-[0.03] ${darkMode ? 'bg-[url("https://grainy-gradients.vercel.app/noise.svg")]' : 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px]'}`}></div>
+      {/* MAIN CONTENT */}
+      <main className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
+        
+        {/* HEADER */}
+        <header className="h-20 bg-white dark:bg-gray-800 shadow-sm flex items-center justify-between px-8 sticky top-0 z-20">
+           <div className="flex items-center gap-4">
+              <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                 {sidebarOpen ? <Menu /> : <ChevronRight />}
+              </button>
+              <h2 className="text-xl font-bold capitalize">{activeTab.replace('-', ' ')}</h2>
+           </div>
 
-        {/* Floating Header */}
-        <header className={`sticky top-4 mx-6 rounded-2xl px-6 py-4 flex justify-between items-center z-30 transition-all duration-300 shadow-sm border ${darkMode ? 'bg-[#1E293B]/80 border-slate-700/50 shadow-black/20' : 'bg-white/80 border-white/50 shadow-slate-200/50'} backdrop-blur-md`}>
-          <div className="flex items-center gap-4">
-             <h2 className={`text-2xl font-bold capitalize tracking-tight ${darkMode ? 'text-white' : 'text-slate-800'}`}>{activeTab}</h2>
-             <div className={`flex items-center gap-2 px-3 py-1 text-xs font-bold rounded-full border ${darkMode ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
-               <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-               </span>
-               System Operational
-             </div>
-          </div>
-          
-          <div className="flex items-center gap-6">
-             <button onClick={toggleTheme} className={`p-2.5 rounded-full transition-all duration-300 ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                {darkMode ? <Sun size={18}/> : <Moon size={18}/>}
-             </button>
-             
-             <div className="flex items-center gap-3 pl-6 border-l border-slate-200/20">
-                <div className="text-right hidden md:block leading-tight">
-                    <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-                        {user?.displayName || 'Administrator'}
-                    </p>
-                    <p className="text-[10px] uppercase font-bold text-slate-500">Super Admin</p>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-teal-400 p-[2px]">
-                  <div className={`w-full h-full rounded-full flex items-center justify-center font-bold ${darkMode ? 'bg-[#0F172A] text-white' : 'bg-white text-slate-800'}`}>
-                    {user?.displayName?.[0] || 'A'}
-                  </div>
-                </div>
-             </div>
-          </div>
+           <div className="flex items-center gap-6">
+              <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-yellow-400">
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+
+              <div className="relative">
+                 <button onClick={() => setShowNotifs(!showNotifs)} className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <Bell size={20} />
+                    {criticalCount > 0 && (
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse ring-2 ring-white dark:ring-gray-800"></span>
+                    )}
+                 </button>
+                 
+                 {/* NOTIFICATIONS */}
+                 {showNotifs && (
+                   <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                      <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
+                         <span className="font-bold text-sm">Notifications</span>
+                         <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{criticalCount} Active</span>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                         {criticalAlerts.length === 0 ? (
+                           <div className="p-4 text-center text-sm text-gray-500">No critical alerts.</div>
+                         ) : (
+                           criticalAlerts.slice(0, 3).map(alert => (
+                             <div key={alert.id} className="p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer" onClick={() => setActiveTab('alerts')}>
+                                <div className="flex items-start gap-3">
+                                   <div className="bg-red-100 p-1.5 rounded-full text-red-600"><ShieldAlert size={14} /></div>
+                                   <div>
+                                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{alert.student}</p>
+                                      <p className="text-xs text-gray-500 truncate w-48">{alert.message}</p>
+                                   </div>
+                                </div>
+                             </div>
+                           ))
+                         )}
+                      </div>
+                   </div>
+                 )}
+              </div>
+           </div>
         </header>
 
-        <div className="p-6 pb-20 relative z-10">
-          {renderContent()}
+        {/* DASHBOARD CONTENT */}
+        <div className="p-8 overflow-y-auto h-[calc(100vh-5rem)]">
+           
+           {/* VIEW 1: DASHBOARD */}
+           {activeTab === 'dashboard' && (
+             <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                   <StatCard icon={ShieldAlert} label="Critical Alerts" value={stats.dangerous} color="red" />
+                   <StatCard icon={MessageSquare} label="Total Messages" value={stats.total} color="blue" />
+                   <StatCard icon={CheckCircle} label="Resolved" value={stats.resolved} color="green" />
+                   
+                   {/* DYNAMIC STUDENT COUNT */}
+                   <StatCard icon={User} label="Registered Students" value={studentCount} color="purple" />
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                   <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                      <h3 className="font-bold mb-6 text-gray-700 dark:text-gray-300">Safety Distribution</h3>
+                      <div className="h-64">
+                         <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                               <Pie data={[{name:'Risks', value: stats.dangerous}, {name:'Safe', value: stats.safe}]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                  <Cell fill="#EF4444" />
+                                  <Cell fill="#10B981" />
+                               </Pie>
+                               <RechartsTooltip />
+                               <Legend />
+                            </PieChart>
+                         </ResponsiveContainer>
+                      </div>
+                   </div>
+                   <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                      <h3 className="font-bold mb-6 text-gray-700 dark:text-gray-300">Activity Trends</h3>
+                      <div className="h-64">
+                         <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={alerts.slice(0,10).reverse()}>
+                               <defs>
+                                  <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
+                                     <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
+                                     <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                                  </linearGradient>
+                               </defs>
+                               <XAxis dataKey="timestampFormatted" hide />
+                               <YAxis />
+                               <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                               <RechartsTooltip />
+                               <Area type="monotone" dataKey="status" stroke="#8884d8" fillOpacity={1} fill="url(#colorRisk)" />
+                            </AreaChart>
+                         </ResponsiveContainer>
+                      </div>
+                   </div>
+                </div>
+             </div>
+           )}
+
+           {/* VIEW 2: LIVE ALERTS (DANGEROUS ONLY) */}
+           {activeTab === 'alerts' && (
+             <div className="animate-in slide-in-from-right duration-500">
+                <div className="flex justify-between items-center mb-6">
+                   <h2 className="text-2xl font-bold flex items-center gap-2"><Siren className="text-red-500" /> Action Required (Critical)</h2>
+                </div>
+
+                {criticalAlerts.length === 0 ? (
+                   <div className="flex flex-col items-center justify-center h-64 bg-white dark:bg-gray-800 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+                      <CheckCircle size={48} className="text-green-500 mb-4" />
+                      <h3 className="text-xl font-bold text-gray-700 dark:text-white">All Clear!</h3>
+                      <p className="text-gray-500">No critical threats requiring action.</p>
+                   </div>
+                ) : (
+                   <div className="space-y-4">
+                      {criticalAlerts.map(alert => (
+                         <div key={alert.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border-l-4 border-red-500 p-6">
+                            <div className="flex flex-col md:flex-row justify-between gap-4">
+                               <div className="flex items-start gap-4">
+                                  <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-full text-red-600 animate-pulse">
+                                     <Siren size={24}/>
+                                  </div>
+                                  <div>
+                                     <div className="flex items-center gap-2 mb-1">
+                                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">{alert.student}</h3>
+                                        <span className="bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full font-bold uppercase">{alert.status}</span>
+                                     </div>
+                                     <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                                        <span className="font-semibold">{alert.department} - Year {alert.year}</span>
+                                        <span className="mx-2">•</span>
+                                        <span className="text-gray-400">{alert.timestampFormatted}</span>
+                                     </p>
+                                     <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200 text-sm">
+                                        <HighlightRisk text={alert.message} />
+                                     </div>
+                                  </div>
+                               </div>
+                               
+                               <div className="flex flex-col justify-center gap-2 min-w-[140px]">
+                                  <button onClick={() => handleResolve(alert.id)} className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md">
+                                    <CheckCircle size={16} /> Resolve
+                                  </button>
+                                  <button onClick={() => setSelectedStudent(alert)} className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold">
+                                    <Info size={16} /> View Details
+                                  </button>
+                               </div>
+                            </div>
+                         </div>
+                      ))}
+                   </div>
+                )}
+             </div>
+           )}
+
+           {/* VIEW 3: FORUM FEED (ALL MESSAGES) */}
+           {activeTab === 'forum' && (
+             <div className="animate-in slide-in-from-right duration-500">
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><MessageSquare className="text-blue-500" /> Live Forum Analysis</h2>
+                <div className="space-y-4">
+                   {forumFeed.map(msg => {
+                      // COLOR CODING
+                      let borderColor = "border-green-500";
+                      let bgBadge = "bg-green-100 text-green-700";
+                      let icon = <CheckCircle size={20} className="text-green-500"/>;
+
+                      if (msg.status === 'Dangerous') {
+                          borderColor = "border-yellow-500";
+                          bgBadge = "bg-yellow-100 text-yellow-800";
+                          icon = <AlertTriangle size={20} className="text-yellow-500"/>;
+                      } else if (msg.status === 'SOS' || msg.status === 'Critical') {
+                          borderColor = "border-red-500";
+                          bgBadge = "bg-red-100 text-red-700 animate-pulse";
+                          icon = <Siren size={20} className="text-red-500"/>;
+                      }
+
+                      return (
+                        <div key={msg.id} className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 ${borderColor} transition-all hover:shadow-md`}>
+                           <div className="flex justify-between items-start">
+                              <div className="flex gap-4">
+                                 <div className="mt-1">{icon}</div>
+                                 <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                       <span className="font-bold text-gray-800 dark:text-white">{msg.student}</span>
+                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${bgBadge}`}>
+                                          {msg.status}
+                                       </span>
+                                    </div>
+                                    <p className="text-gray-600 dark:text-gray-300 text-sm">
+                                       <HighlightRisk text={msg.message} />
+                                    </p>
+                                    <div className="text-xs text-gray-400 mt-2 flex gap-3">
+                                       <span>{msg.timestampFormatted}</span>
+                                       <span>• {msg.department}</span>
+                                    </div>
+                                 </div>
+                              </div>
+                              <button onClick={() => setSelectedStudent(msg)} className="text-gray-400 hover:text-blue-500">
+                                 <Info size={18} />
+                              </button>
+                           </div>
+                        </div>
+                      );
+                   })}
+                </div>
+             </div>
+           )}
+
+           {/* VIEW 4: HISTORY */}
+           {activeTab === 'history' && (
+             <div className="animate-in slide-in-from-right duration-500">
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><History className="text-blue-500" /> Resolved History</h2>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                   <table className="w-full text-left">
+                      <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 text-xs uppercase font-bold">
+                         <tr>
+                            <th className="p-4">Time</th>
+                            <th className="p-4">Status</th>
+                            <th className="p-4">Student</th>
+                            <th className="p-4">Message</th>
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                         {historyAlerts.map(alert => (
+                            <tr key={alert.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                               <td className="p-4 text-sm text-gray-500">{alert.timestampFormatted}</td>
+                               <td className="p-4"><span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Resolved</span></td>
+                               <td className="p-4 text-sm font-bold text-gray-700 dark:text-gray-200">{alert.student}</td>
+                               <td className="p-4 text-sm text-gray-600 dark:text-gray-300">{alert.message}</td>
+                            </tr>
+                         ))}
+                      </tbody>
+                   </table>
+                </div>
+             </div>
+           )}
+
         </div>
       </main>
+
+      {/* MODAL */}
+      {selectedStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden relative">
+              <div className="bg-blue-600 p-6 text-white relative">
+                 <button onClick={() => setSelectedStudent(null)} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition">
+                    <X size={20} />
+                 </button>
+                 <div className="flex items-center gap-4">
+                    <div className="bg-white/20 p-3 rounded-2xl"><User size={40} /></div>
+                    <div>
+                       <h2 className="text-2xl font-bold">{selectedStudent.student}</h2>
+                       <p className="text-blue-100 text-sm">Student Profile ID</p>
+                    </div>
+                 </div>
+              </div>
+              <div className="p-8 space-y-6">
+                 <div className={`border-l-4 p-4 rounded-r-lg ${selectedStudent.status === 'Safe' ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+                    <h3 className="font-bold text-xs uppercase mb-1">Message Content</h3>
+                    <p className="text-gray-800 dark:text-gray-200 font-medium">"{selectedStudent.message}"</p>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                       <p className="text-xs text-gray-500 uppercase font-bold">Department</p>
+                       <p className="text-lg font-bold dark:text-white">{selectedStudent.department || "N/A"}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                       <p className="text-xs text-gray-500 uppercase font-bold">Year</p>
+                       <p className="text-lg font-bold dark:text-white">{selectedStudent.year || "N/A"}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                       <p className="text-xs text-gray-500 uppercase font-bold">Section</p>
+                       <p className="text-lg font-bold dark:text-white">{selectedStudent.section || "N/A"}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                       <p className="text-xs text-gray-500 uppercase font-bold">Email</p>
+                       <p className="text-sm font-bold dark:text-white truncate">{selectedStudent.email || "N/A"}</p>
+                    </div>
+                 </div>
+                 <button onClick={() => setSelectedStudent(null)} className="w-full py-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-white font-bold rounded-xl transition">
+                    Close Details
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
     </div>
   );
 };
 
-// --- 1. OVERVIEW TAB (Bento Grid Style) ---
-const OverviewTab = ({ darkMode }) => (
-  <div className="space-y-6">
-    {/* Stats Grid */}
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-      <ModernStatCard title="Total Students" value="1,240" trend="+12% this month" icon={<Users className="text-blue-500"/>} darkMode={darkMode} />
-      <ModernStatCard title="Stress Level" value="High" trend="Critical in Block B" icon={<Activity className="text-red-500"/>} color="red" darkMode={darkMode} />
-      <ModernStatCard title="Avg Response" value="4m 12s" trend="-30s improvement" icon={<Clock className="text-emerald-500"/>} darkMode={darkMode} />
-      <ModernStatCard title="Pending Alerts" value="2" trend="Action Required" icon={<Bell className="text-orange-500"/>} color="orange" darkMode={darkMode} />
-    </div>
-
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Main Chart */}
-      <div className={`lg:col-span-2 p-6 rounded-3xl border transition-all duration-300 ${darkMode ? 'bg-[#1E293B] border-slate-700/50' : 'bg-white border-slate-200 shadow-sm'}`}>
-        <div className="flex justify-between items-center mb-6">
-          <h3 className={`font-bold text-lg flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-            <TrendingUp size={20} className="text-blue-500"/> Wellness Trends
-          </h3>
-          <select className={`text-sm rounded-lg px-3 py-1 border outline-none ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-            <option>Last 7 Days</option>
-            <option>Last Month</option>
-          </select>
-        </div>
-        <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={stressData}>
-              <defs>
-                <linearGradient id="colorStress" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#334155' : '#E2E8F0'} />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: darkMode ? '#94A3B8' : '#64748B', fontSize: 12}} dy={10}/>
-              <YAxis axisLine={false} tickLine={false} tick={{fill: darkMode ? '#94A3B8' : '#64748B', fontSize: 12}}/>
-              <Tooltip 
-                contentStyle={{backgroundColor: darkMode ? '#0F172A' : '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}}
-                itemStyle={{color: '#3B82F6'}}
-              />
-              <Area type="monotone" dataKey="stress" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#colorStress)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Risk Watchlist */}
-      <div className={`p-6 rounded-3xl border transition-all duration-300 ${darkMode ? 'bg-[#1E293B] border-slate-700/50' : 'bg-white border-slate-200 shadow-sm'}`}>
-        <h3 className={`font-bold text-lg mb-6 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-          <AlertTriangle size={20} className="text-orange-500"/> Priority Watchlist
-        </h3>
-        <div className="space-y-4">
-          <RiskItem id="#8821" zone="Library" score="4.8" level="Critical" darkMode={darkMode} />
-          <RiskItem id="#9923" zone="Hostel A" score="4.2" level="High" darkMode={darkMode} />
-          <RiskItem id="#1102" zone="Canteen" score="4.0" level="High" darkMode={darkMode} />
-          <RiskItem id="#4211" zone="Gym" score="3.8" level="Moderate" darkMode={darkMode} />
-        </div>
-        <button className={`w-full mt-6 py-3 rounded-xl text-sm font-bold transition-all ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
-          View Full Risk Report
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
-// --- 2. STUDENTS TAB ---
-const StudentsTab = ({ darkMode }) => (
-  <div className={`rounded-3xl border overflow-hidden transition-all duration-300 ${darkMode ? 'bg-[#1E293B] border-slate-700/50' : 'bg-white border-slate-200 shadow-sm'}`}>
-    <div className={`p-6 border-b flex justify-between items-center ${darkMode ? 'border-slate-700/50' : 'border-slate-100'}`}>
-       <h3 className={`font-bold text-lg ${darkMode ? 'text-white' : 'text-slate-800'}`}>Recent Student Entries</h3>
-       <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${darkMode ? 'bg-slate-900 border-slate-700 focus-within:border-blue-500' : 'bg-slate-50 border-slate-200 focus-within:border-blue-500'}`}>
-          <Search size={18} className="text-slate-400"/>
-          <input type="text" placeholder="Search by ID..." className={`bg-transparent border-none outline-none text-sm w-48 font-medium ${darkMode ? 'text-white' : 'text-slate-900'}`} />
-       </div>
-    </div>
-    <table className="w-full text-left text-sm">
-      <thead className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'bg-slate-800/50 text-slate-400' : 'bg-slate-50 text-slate-500'}`}>
-        <tr>
-          <th className="px-6 py-4">Student ID</th>
-          <th className="px-6 py-4">Status</th>
-          <th className="px-6 py-4">Last Check-in</th>
-          <th className="px-6 py-4 text-right">Actions</th>
-        </tr>
-      </thead>
-      <tbody className={`divide-y ${darkMode ? 'divide-slate-700/50' : 'divide-slate-100'}`}>
-        <StudentRow id="#8821" status="At Risk" time="2h ago" type="danger" darkMode={darkMode} />
-        <StudentRow id="#4421" status="Healthy" time="5h ago" type="success" darkMode={darkMode} />
-        <StudentRow id="#1299" status="Healthy" time="1d ago" type="success" darkMode={darkMode} />
-        <StudentRow id="#9923" status="Warning" time="10m ago" type="warning" darkMode={darkMode} />
-        <StudentRow id="#5521" status="Healthy" time="1h ago" type="success" darkMode={darkMode} />
-      </tbody>
-    </table>
-  </div>
-);
-
-// --- 3. EMERGENCIES TAB ---
-const EmergenciesTab = ({ darkMode }) => (
-  <div className="max-w-4xl mx-auto">
-    <div className="flex justify-between items-end mb-8">
-      <div>
-        <h3 className={`font-bold text-2xl ${darkMode ? 'text-white' : 'text-slate-800'}`}>Active SOS Alerts</h3>
-        <p className={darkMode ? 'text-slate-400' : 'text-slate-500'}>Real-time emergency monitoring system.</p>
-      </div>
-      <span className="bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-full animate-pulse shadow-lg shadow-red-500/30">
-        2 LIVE ALERTS
-      </span>
-    </div>
-    
-    <div className="space-y-6">
-      {/* Alert 1 */}
-      <EmergencyCard 
-        type="SOS" 
-        title="Immediate SOS Triggered"
-        id="#4829" 
-        location="Library 2nd Floor (User Reported)" 
-        time="2 mins ago" 
-        darkMode={darkMode} 
-      />
-
-      {/* Alert 2 */}
-      <EmergencyCard 
-        type="FLAG" 
-        title="High Stress Pattern Detected"
-        id="#9921" 
-        location="Not Provided" 
-        time="15 mins ago" 
-        darkMode={darkMode} 
-      />
-    </div>
-  </div>
-);
-
-// --- MODERN HELPER COMPONENTS ---
-
-const NavItem = ({ icon, text, active, badge, onClick, darkMode }) => (
+// --- SUB-COMPONENTS ---
+const SidebarItem = ({ icon: Icon, label, active, onClick, open, badge, color }) => (
   <button 
     onClick={onClick}
-    className={`w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-200 group ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : (darkMode ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm')}`}
+    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'} ${!open && 'justify-center'}`}
   >
-    <div className="flex items-center gap-3">
-      {React.cloneElement(icon, { size: 20, className: active ? 'text-white' : '' })} 
-      <span className="font-semibold text-sm">{text}</span>
+    <div className="relative">
+      <Icon size={20} className={!active ? color : ''} />
+      {badge > 0 && <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold">{badge}</span>}
     </div>
-    {badge && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${active ? 'bg-white text-blue-600' : 'bg-red-500 text-white'}`}>{badge}</span>}
+    {open && <span className="font-medium">{label}</span>}
   </button>
 );
 
-const ModernStatCard = ({ title, value, trend, icon, color = "blue", darkMode }) => (
-  <div className={`p-6 rounded-3xl border transition-all duration-300 hover:-translate-y-1 ${darkMode ? 'bg-[#1E293B] border-slate-700/50' : 'bg-white border-slate-200 shadow-sm'}`}>
-    <div className="flex justify-between items-start mb-4">
-      <div className={`p-3 rounded-2xl ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>{icon}</div>
-      {color === 'red' && <span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>}
-    </div>
-    <div>
-      <h3 className={`text-3xl font-bold mb-1 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{value}</h3>
-      <p className={`text-sm font-medium ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>{title}</p>
-      <p className={`text-xs mt-2 font-bold ${color === 'red' ? 'text-red-500' : (color === 'orange' ? 'text-orange-500' : 'text-emerald-500')}`}>{trend}</p>
-    </div>
-  </div>
-);
-
-const RiskItem = ({ id, zone, score, level, darkMode }) => (
-  <div className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${darkMode ? 'bg-slate-800/50 border-slate-700 hover:bg-slate-800' : 'bg-slate-50 border-slate-100 hover:bg-white hover:shadow-sm'}`}>
-    <div className="flex items-center gap-4">
-      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs ${level === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
-        {score}
+const StatCard = ({ icon: Icon, label, value, color }) => {
+  const colors = {
+    red: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400',
+    green: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',
+    blue: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',
+    purple: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400'
+  };
+  return (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-4 transition-transform hover:scale-105">
+      <div className={`p-4 rounded-full ${colors[color]}`}>
+        <Icon size={24} />
       </div>
       <div>
-        <p className={`font-bold text-sm ${darkMode ? 'text-white' : 'text-slate-800'}`}>Student {id}</p>
-        <p className="text-xs text-slate-500 flex items-center gap-1"><Lock size={10}/> Zone: {zone}</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{label}</p>
+        <h3 className="text-2xl font-bold text-gray-800 dark:text-white">{value}</h3>
       </div>
     </div>
-    <span className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full ${level === 'Critical' ? 'bg-red-500/10 text-red-500' : 'bg-orange-500/10 text-orange-500'}`}>{level}</span>
-  </div>
-);
-
-const StudentRow = ({ id, status, time, type, darkMode }) => {
-  const getStatusColor = () => {
-    if (type === 'danger') return 'bg-red-500/10 text-red-500 border-red-500/20';
-    if (type === 'warning') return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
-    return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-  };
-
-  return (
-    <tr className={`border-b transition-colors group ${darkMode ? 'border-slate-800 hover:bg-slate-800/30' : 'border-slate-100 hover:bg-slate-50'}`}>
-      <td className={`px-6 py-4 font-medium ${darkMode ? 'text-white' : 'text-slate-900'}`}>{id}</td>
-      <td className="px-6 py-4">
-        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getStatusColor()}`}>{status}</span>
-      </td>
-      <td className="px-6 py-4 text-xs text-slate-500 flex items-center gap-2"><Clock size={14}/> {time}</td>
-      <td className="px-6 py-4 text-right">
-        <button className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}><MoreVertical size={16}/></button>
-      </td>
-    </tr>
   );
 };
-
-const EmergencyCard = ({ type, title, id, location, time, darkMode }) => (
-  <div className={`p-6 rounded-3xl border border-l-[6px] flex flex-col md:flex-row justify-between items-center gap-6 transition-all shadow-sm hover:shadow-md ${type === 'SOS' ? 'border-l-red-500' : 'border-l-orange-500'} ${darkMode ? 'bg-[#1E293B] border-slate-700/50' : 'bg-white border-slate-200'}`}>
-    <div className="flex items-start gap-4 w-full">
-       <div className={`p-3 rounded-2xl shrink-0 ${type === 'SOS' ? 'bg-red-500/10 text-red-500' : 'bg-orange-500/10 text-orange-500'}`}>
-          {type === 'SOS' ? <ShieldAlert size={28}/> : <AlertTriangle size={28}/>}
-       </div>
-       <div>
-          <h4 className={`font-bold text-lg ${type === 'SOS' ? 'text-red-500' : 'text-orange-500'}`}>{title}</h4>
-          <div className={`flex flex-col md:flex-row gap-2 md:gap-6 mt-2 text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-             <span className="flex items-center gap-1 font-medium"><Users size={14}/> ID: {id}</span>
-             <span className="flex items-center gap-1 font-medium"><AlertTriangle size={14}/> Loc: {location}</span>
-             <span className="flex items-center gap-1 opacity-70"><Clock size={14}/> {time}</span>
-          </div>
-       </div>
-    </div>
-    <div className="flex gap-3 w-full md:w-auto">
-      <button className={`px-6 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all flex-1 ${type === 'SOS' ? 'bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-500/30' : 'bg-slate-800 text-white hover:bg-slate-900'}`}>
-        {type === 'SOS' ? 'Dispatch Team' : 'Notify Staff'}
-      </button>
-      <button className={`p-3 rounded-xl border transition-all ${darkMode ? 'border-slate-700 hover:bg-slate-800 text-slate-400' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}>
-        <MoreVertical size={20}/>
-      </button>
-    </div>
-  </div>
-);
 
 export default AdminDashboard;

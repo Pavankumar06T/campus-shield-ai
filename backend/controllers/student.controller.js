@@ -1,10 +1,8 @@
 const { db, admin } = require('../config/firebase');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+// 👇 IMPORT THE SERVICE HERE
+const chatbotService = require('../services/chatbot.service'); 
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-// 1. Submit Daily Check-in (From the Sliders)
+// 1. Submit Daily Check-in
 exports.submitCheckIn = async (req, res) => {
   try {
     const { mood, stress, sleep, academic, social } = req.body;
@@ -19,12 +17,11 @@ exports.submitCheckIn = async (req, res) => {
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     };
 
-    // Save to checkins subcollection for history
     await db.collection('users').doc(userId).collection('checkins').add(checkInData);
-
-    // Update the main user document with the latest stress score (mapped to 0-100)
+    
+    // Update main profile
     await db.collection('users').doc(userId).update({
-      stressScore: Number(stress) * 20, // Converting 1-5 scale to 0-100 for admin stats
+      stressScore: Number(stress) * 20, 
       lastCheckIn: admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -34,45 +31,16 @@ exports.submitCheckIn = async (req, res) => {
   }
 };
 
-// 2. Chat with AI (The Venting logic)
+// 2. Chat with AI (Connects to your Service)
 exports.handleChat = async (req, res) => {
-  try {
-    const { message } = req.body;
-    const userId = req.user.uid;
-
-    // A. AI Analysis Prompt
-    const prompt = `Return ONLY JSON: {"stress": "High" or "Low", "reply": "empathetic text"}. Text: "${message}"`;
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const aiData = JSON.parse(response.text().trim().match(/\{[\s\S]*\}/)[0]);
-
-    // B. Save Message to DB
-    const messageRef = db.collection('chats').doc(userId).collection('messages');
-    await messageRef.add({
-      text: message,
-      sender: 'student',
-      stress: aiData.stress,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // C. Check trend for Red Alert
-    const history = await messageRef.orderBy('timestamp', 'desc').limit(5).get();
-    const highStressCount = history.docs.filter(d => d.data().stress === 'High').length;
-
-    if (highStressCount >= 4) {
-      await db.collection('users').doc(userId).update({ isAtRisk: true });
-    }
-
-    res.json({ reply: aiData.reply, stress_score: highStressCount });
-  } catch (error) {
-    res.status(500).json({ reply: "I'm listening. Go on." });
-  }
+    // 👇 CALL THE FUNCTION HERE
+    return chatbotService.AiCall(req, res);
 };
 
-// 3. Trigger Emergency (From EmergencyPage or SOS button)
+// 3. Trigger Emergency
 exports.reportEmergency = async (req, res) => {
   try {
-    const { location, details, type } = req.body; // type: 'SOS' or 'Manual'
+    const { location, details, type } = req.body; 
     const userId = req.user.uid;
 
     const emergencyDoc = {
