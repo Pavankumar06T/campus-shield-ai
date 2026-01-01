@@ -37,7 +37,7 @@ const HighlightRisk = ({ text }) => {
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [alerts, setAlerts] = useState([]);
-  const [studentCount, setStudentCount] = useState(0); // <--- NEW STATE FOR LIVE COUNT
+  const [studentCount, setStudentCount] = useState(0); 
   const [stats, setStats] = useState({ safe: 0, dangerous: 0, resolved: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
@@ -48,38 +48,60 @@ const AdminDashboard = () => {
   
   const navigate = useNavigate();
 
-  // --- 1. LISTEN TO ALERTS (CHATS/SOS) ---
+  // --- 1. LISTEN TO ALERTS (Fixed for riskReports) ---
   useEffect(() => {
-    const q = query(collection(db, "safety_alerts"), orderBy("timestamp", "desc"));
+    const q = query(collection(db, "riskReports"), orderBy("timestamp", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const realData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        timestampFormatted: doc.data().timestamp?.toDate 
-          ? doc.data().timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) 
-          : 'Just now'
-      }));
+      const realData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          student: data.studentName || "Unknown Student", 
+          message: data.reason || "No details provided",
+          status: data.severity || data.status || "Pending", 
+          timestampFormatted: data.timestamp?.toDate 
+            ? data.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) 
+            : 'Just now'
+        };
+      });
       setAlerts(realData);
       
-      const safe = realData.filter(a => a.status === 'Safe').length;
-      const dangerous = realData.filter(a => ['Dangerous', 'SOS', 'Critical'].includes(a.status)).length;
+      // Calculate Stats
+      const dangerous = realData.filter(a => ['Dangerous', 'SOS', 'Critical', 'High'].includes(a.status)).length;
       const resolved = realData.filter(a => a.status === 'Resolved').length;
       
-      setStats({ safe, dangerous, resolved, total: realData.length });
+      setStats({ dangerous, resolved, total: realData.length });
       setLoading(false);
     }, (error) => console.error(error));
     return () => unsubscribe();
   }, []);
 
-  // --- 2. NEW: LISTEN TO REGISTERED STUDENTS COUNT ---
+  // --- 2. LISTEN TO REGISTERED STUDENTS COUNT ---
   useEffect(() => {
-    // Queries the "users" collection where role is 'student'
     const q = query(collection(db, "users"), where("role", "==", "student"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        setStudentCount(snapshot.size); // The .size property gives the live count
+        setStudentCount(snapshot.size); 
     });
     return () => unsubscribe();
   }, []);
+
+  // --- CHART DATA PREPARATION ---
+  // Fix: If there are no risks, we calculate "Safe" based on Total Students. 
+  // If Total Students is 0 (local dev), we force 1 so the graph is full Green.
+  const safeCount = Math.max(1, studentCount - stats.dangerous); 
+  
+  const pieData = [
+    { name: 'Risks', value: stats.dangerous },
+    { name: 'Safe', value: stats.dangerous === 0 ? 100 : safeCount } // Force 100 if no risks, just for visuals
+  ];
+
+  // Fix: Area Chart needs dummy data if empty so it doesn't look broken
+  const areaData = alerts.length > 0 ? alerts.slice(0,10).reverse() : [
+    { timestampFormatted: 'Mon', status: 0 }, { timestampFormatted: 'Tue', status: 0 },
+    { timestampFormatted: 'Wed', status: 0 }, { timestampFormatted: 'Thu', status: 0 },
+    { timestampFormatted: 'Fri', status: 0 }
+  ];
 
   // --- ACTIONS ---
   const handleLogout = async () => {
@@ -95,9 +117,10 @@ const AdminDashboard = () => {
   const handleResolve = async (id) => {
     if(window.confirm("Mark this as Resolved? It will move to History.")) {
       try {
-        const alertRef = doc(db, "safety_alerts", id);
+        const alertRef = doc(db, "riskReports", id);
         await updateDoc(alertRef, {
           status: "Resolved",
+          severity: "Resolved", 
           resolvedAt: serverTimestamp()
         });
       } catch (err) {
@@ -107,7 +130,7 @@ const AdminDashboard = () => {
   };
 
   // --- FILTERS ---
-  const criticalAlerts = alerts.filter(a => ['Dangerous', 'SOS', 'Critical'].includes(a.status));
+  const criticalAlerts = alerts.filter(a => ['Dangerous', 'SOS', 'Critical', 'High'].includes(a.status));
   const forumFeed = alerts.filter(a => a.status !== 'Resolved'); 
   const historyAlerts = alerts.filter(a => a.status === 'Resolved');
   const criticalCount = criticalAlerts.length;
@@ -132,7 +155,7 @@ const AdminDashboard = () => {
         <nav className="flex-1 py-6 px-3 space-y-2">
           <SidebarItem icon={LayoutDashboard} label="Overview" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} open={sidebarOpen} />
           <SidebarItem icon={Siren} label="Live Alerts" active={activeTab === 'alerts'} onClick={() => setActiveTab('alerts')} open={sidebarOpen} badge={criticalCount} color="text-red-500" />
-          <SidebarItem icon={MessageSquare} label="Forum Feed" active={activeTab === 'forum'} onClick={() => setActiveTab('forum')} open={sidebarOpen} color="text-blue-500" />
+          <SidebarItem icon={MessageSquare} label="Risk Feed" active={activeTab === 'forum'} onClick={() => setActiveTab('forum')} open={sidebarOpen} color="text-blue-500" />
           <SidebarItem icon={History} label="History Log" active={activeTab === 'history'} onClick={() => setActiveTab('history')} open={sidebarOpen} />
         </nav>
 
@@ -206,11 +229,9 @@ const AdminDashboard = () => {
            {activeTab === 'dashboard' && (
              <div className="space-y-8 animate-in fade-in duration-500">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   <StatCard icon={ShieldAlert} label="Critical Alerts" value={stats.dangerous} color="red" />
-                   <StatCard icon={MessageSquare} label="Total Messages" value={stats.total} color="blue" />
+                   <StatCard icon={ShieldAlert} label="High Risk / Critical" value={stats.dangerous} color="red" />
+                   <StatCard icon={MessageSquare} label="Total Reports" value={stats.total} color="blue" />
                    <StatCard icon={CheckCircle} label="Resolved" value={stats.resolved} color="green" />
-                   
-                   {/* DYNAMIC STUDENT COUNT */}
                    <StatCard icon={User} label="Registered Students" value={studentCount} color="purple" />
                 </div>
                 
@@ -220,9 +241,17 @@ const AdminDashboard = () => {
                       <div className="h-64">
                          <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                               <Pie data={[{name:'Risks', value: stats.dangerous}, {name:'Safe', value: stats.safe}]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                  <Cell fill="#EF4444" />
-                                  <Cell fill="#10B981" />
+                               <Pie 
+                                 data={pieData} 
+                                 cx="50%" 
+                                 cy="50%" 
+                                 innerRadius={60} 
+                                 outerRadius={80} 
+                                 paddingAngle={5} 
+                                 dataKey="value"
+                               >
+                                  <Cell fill="#EF4444" /> {/* Red for Risks */}
+                                  <Cell fill="#10B981" /> {/* Green for Safe */}
                                </Pie>
                                <RechartsTooltip />
                                <Legend />
@@ -234,7 +263,7 @@ const AdminDashboard = () => {
                       <h3 className="font-bold mb-6 text-gray-700 dark:text-gray-300">Activity Trends</h3>
                       <div className="h-64">
                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={alerts.slice(0,10).reverse()}>
+                            <AreaChart data={areaData}>
                                <defs>
                                   <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
                                      <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
@@ -282,7 +311,7 @@ const AdminDashboard = () => {
                                         <span className="bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full font-bold uppercase">{alert.status}</span>
                                      </div>
                                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                                        <span className="font-semibold">{alert.department} - Year {alert.year}</span>
+                                        <span className="font-semibold">{alert.department || "General"}</span>
                                         <span className="mx-2">•</span>
                                         <span className="text-gray-400">{alert.timestampFormatted}</span>
                                      </p>
@@ -311,15 +340,14 @@ const AdminDashboard = () => {
            {/* VIEW 3: FORUM FEED (ALL MESSAGES) */}
            {activeTab === 'forum' && (
              <div className="animate-in slide-in-from-right duration-500">
-                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><MessageSquare className="text-blue-500" /> Live Forum Analysis</h2>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><MessageSquare className="text-blue-500" /> Risk Feed Analysis</h2>
                 <div className="space-y-4">
                    {forumFeed.map(msg => {
-                      // COLOR CODING
                       let borderColor = "border-green-500";
                       let bgBadge = "bg-green-100 text-green-700";
                       let icon = <CheckCircle size={20} className="text-green-500"/>;
 
-                      if (msg.status === 'Dangerous') {
+                      if (msg.status === 'Dangerous' || msg.status === 'High') {
                           borderColor = "border-yellow-500";
                           bgBadge = "bg-yellow-100 text-yellow-800";
                           icon = <AlertTriangle size={20} className="text-yellow-500"/>;
@@ -346,7 +374,7 @@ const AdminDashboard = () => {
                                     </p>
                                     <div className="text-xs text-gray-400 mt-2 flex gap-3">
                                        <span>{msg.timestampFormatted}</span>
-                                       <span>• {msg.department}</span>
+                                       <span>• {msg.department || "N/A"}</span>
                                     </div>
                                  </div>
                               </div>
@@ -405,7 +433,7 @@ const AdminDashboard = () => {
                     <div className="bg-white/20 p-3 rounded-2xl"><User size={40} /></div>
                     <div>
                        <h2 className="text-2xl font-bold">{selectedStudent.student}</h2>
-                       <p className="text-blue-100 text-sm">Student Profile ID</p>
+                       <p className="text-blue-100 text-sm">Student Profile ID: {selectedStudent.userId}</p>
                     </div>
                  </div>
               </div>
@@ -416,20 +444,12 @@ const AdminDashboard = () => {
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                       <p className="text-xs text-gray-500 uppercase font-bold">Department</p>
-                       <p className="text-lg font-bold dark:text-white">{selectedStudent.department || "N/A"}</p>
+                       <p className="text-xs text-gray-500 uppercase font-bold">Severity</p>
+                       <p className="text-lg font-bold dark:text-white">{selectedStudent.status}</p>
                     </div>
                     <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                       <p className="text-xs text-gray-500 uppercase font-bold">Year</p>
-                       <p className="text-lg font-bold dark:text-white">{selectedStudent.year || "N/A"}</p>
-                    </div>
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                       <p className="text-xs text-gray-500 uppercase font-bold">Section</p>
-                       <p className="text-lg font-bold dark:text-white">{selectedStudent.section || "N/A"}</p>
-                    </div>
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                       <p className="text-xs text-gray-500 uppercase font-bold">Email</p>
-                       <p className="text-sm font-bold dark:text-white truncate">{selectedStudent.email || "N/A"}</p>
+                       <p className="text-xs text-gray-500 uppercase font-bold">Time</p>
+                       <p className="text-sm font-bold dark:text-white">{selectedStudent.timestampFormatted}</p>
                     </div>
                  </div>
                  <button onClick={() => setSelectedStudent(null)} className="w-full py-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-white font-bold rounded-xl transition">

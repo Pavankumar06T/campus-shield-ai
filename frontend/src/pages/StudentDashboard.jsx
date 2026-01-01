@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { useTheme } from '../components/ThemeContext';
 import { apiRequest } from '../api'; 
-import { auth, db } from '../firebase'; // Import DB
+import { auth, db } from '../firebase'; 
 import { signOut } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; // Import Firestore functions
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
 import { useNavigate } from 'react-router-dom';
 import { 
   MessageCircle, Phone, LogOut, Activity, ArrowRight, ShieldCheck, 

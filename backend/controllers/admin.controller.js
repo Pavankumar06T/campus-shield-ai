@@ -4,7 +4,7 @@ const { db } = require('../config/firebase');
 exports.getDashboardStats = async (req, res) => {
   try {
     const studentsSnapshot = await db.collection('users').where('role', '==', 'student').get();
-    const alertsSnapshot = await db.collection('emergencies').where('status', '==', 'active').get();
+    const alertsSnapshot = await db.collection('riskReports').where('status', 'in', ['High', 'Dangerous', 'Critical']).get(); // Updated to check riskReports
     
     let highStressCount = 0;
     studentsSnapshot.forEach(doc => {
@@ -21,10 +21,9 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
-// 2. Get List of At-Risk Students (Data from Member 2's AI)
+// 2. Get List of At-Risk Students
 exports.getAtRiskStudents = async (req, res) => {
   try {
-    // Fetch students with stress score > 75 (Threshold)
     const snapshot = await db.collection('users')
       .where('stressScore', '>', 75)
       .orderBy('stressScore', 'desc')
@@ -41,7 +40,7 @@ exports.getAtRiskStudents = async (req, res) => {
   }
 };
 
-// 3. Get Emergency History (Data from Member 4)
+// 3. Get Emergency Logs
 exports.getEmergencyLogs = async (req, res) => {
   try {
     const snapshot = await db.collection('emergencies')
@@ -55,6 +54,24 @@ exports.getEmergencyLogs = async (req, res) => {
     });
 
     res.status(200).json(logs);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// 4. NEW: Get Risk Reports directly
+exports.getRiskReports = async (req, res) => {
+  try {
+    const snapshot = await db.collection('riskReports')
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    const reports = [];
+    snapshot.forEach(doc => {
+      reports.push({ id: doc.id, ...doc.data() });
+    });
+
+    res.status(200).json(reports);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
