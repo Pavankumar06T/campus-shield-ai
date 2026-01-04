@@ -9,7 +9,8 @@ const adminRoutes = require('./routes/admin.routes');
 
 // Allow your Frontend URL (Change port if your Vite runs on a different one)
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], 
+  origin: 'https://campus-shield-ai.web.app/',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
 
