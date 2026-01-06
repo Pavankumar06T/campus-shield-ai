@@ -59,3 +59,32 @@ exports.reportEmergency = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// 4. Create Forum Post
+exports.createForumPost = async (req, res) => {
+  try {
+    const { title, content, author } = req.body;
+
+    // Basic Validation
+    if (!title || !content) {
+      return res.status(400).json({ error: "Title and Content are required" });
+    }
+
+    const newPost = {
+      title,
+      content,
+      author: author || "Anonymous", // Uses name from frontend or defaults to Anonymous
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      likes: 0,
+      comments: []
+    };
+
+    // Save to 'forum_posts' collection in Firestore
+    await db.collection('forum_posts').add(newPost);
+
+    res.status(201).json({ message: "Post created successfully" });
+  } catch (error) {
+    console.error("Forum Error:", error);
+    res.status(500).json({ error: "Failed to save post" });
+  }
+};

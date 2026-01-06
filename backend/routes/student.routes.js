@@ -13,6 +13,7 @@ studentRouter.use(checkStudent);
 studentRouter.post('/checkin', studentController.submitCheckIn);
 studentRouter.post('/chat', studentController.handleChat);
 studentRouter.post('/emergency', studentController.reportEmergency);
+studentRouter.post('/forum', studentController.createForumPost); 
 
 
 module.exports = studentRouter;

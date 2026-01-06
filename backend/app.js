@@ -1,22 +1,25 @@
 const express = require('express');
 const app = express();
 const cors = require('cors');
-require('dotenv').config(); // Ensure you have a .env file
+require('dotenv').config(); 
 
-// Import Routes
 const studentRoutes = require('./routes/student.routes');
 const adminRoutes = require('./routes/admin.routes'); 
 
-// Allow your Frontend URL (Change port if your Vite runs on a different one)
+// --- FIXED CORS CONFIGURATION ---
 app.use(cors({
-  origin: '*',
+  // Replace '*' with your specific URLs
+  origin: [
+    'http://localhost:5173',                   // For local testing
+    'https://campus-shield-ai-tctr.onrender.com' // (Optional) Your live frontend URL
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  credentials: true 
 }));
+// --------------------------------
 
 app.use(express.json());
 
-// Use Routes
 app.use('/api/admin', adminRoutes); 
 app.use('/api/student', studentRoutes);
 
