@@ -76,3 +76,14 @@ exports.getRiskReports = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// 5. Delete Forum Post (Moderation)
+exports.deleteForumPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    await db.collection('forum_posts').doc(postId).delete();
+    res.status(200).json({ message: "Post deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

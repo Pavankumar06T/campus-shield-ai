@@ -12,6 +12,7 @@ adminRouter.use(checkAdmin);
 adminRouter.get('/stats', adminController.getDashboardStats);
 adminRouter.get('/at-risk', adminController.getAtRiskStudents);
 adminRouter.get('/emergencies', adminController.getEmergencyLogs);
-adminRouter.get('/risks', adminController.getRiskReports); // <--- Added this
+adminRouter.get('/risks', adminController.getRiskReports);
+adminRouter.delete('/forum/:postId', adminController.deleteForumPost);
 
 module.exports = adminRouter;
