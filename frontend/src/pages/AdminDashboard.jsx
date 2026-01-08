@@ -64,7 +64,10 @@ const AdminDashboard = () => {
   const [sosAlerts, setSosAlerts] = useState([]);
   const [riskLogs, setRiskLogs] = useState([]);
   const [forumPosts, setForumPosts] = useState([]);
+  
+  // UPDATED: Split counts for users
   const [studentCount, setStudentCount] = useState(0);
+  const [atRiskCount, setAtRiskCount] = useState(0);
   
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -80,7 +83,7 @@ const AdminDashboard = () => {
       setSosAlerts(data.filter(d => d.status !== 'Resolved')); // Only show active SOS
     });
 
-    // B. AI Monitor (Risk Reports)
+    // B. AI Monitor (Risk Reports) - Kept for the Table & Activity Trend
     const qRisks = query(collection(db, "riskReports"), orderBy("timestamp", "desc"));
     const unsubRisks = onSnapshot(qRisks, (snap) => {
       setRiskLogs(snap.docs.map(d => ({ 
@@ -97,9 +100,21 @@ const AdminDashboard = () => {
       setForumPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    // D. Students Count
+    // D. Students Count (UPDATED LOGIC)
+    // We now look at the 'users' collection to determine Risk Stats
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-      setStudentCount(snap.docs.filter(d => d.data().role === 'student').length);
+      const allUsers = snap.docs.map(d => d.data());
+      
+      // Filter strictly for students
+      const students = allUsers.filter(u => u.role === 'student');
+      
+      // Count total students
+      setStudentCount(students.length);
+
+      // Count students where isAtRisk is strictly true
+      const riskyStudents = students.filter(u => u.isAtRisk === true).length;
+      setAtRiskCount(riskyStudents);
+
       setLoading(false);
     });
 
@@ -135,24 +150,52 @@ const AdminDashboard = () => {
     document.documentElement.classList.toggle('dark');
   };
 
-  // --- CHART DATA PREP ---
-  const criticalCount = riskLogs.filter(r => ['High', 'Critical'].includes(r.severity)).length;
-  const safeCount = Math.max(0, riskLogs.length - criticalCount);
+  // --- CHART DATA PREP (UPDATED) ---
   
+  // 1. Calculate Safe Students based on User Table (Total - At Risk)
+  const safeStudentCount = Math.max(0, studentCount - atRiskCount);
+
+  // 2. Updated Pie Data to reflect PEOPLE, not LOGS
   const pieData = [
-    { name: 'Safe Interactions', value: safeCount || 10, color: '#10B981' },
-    { name: 'High Risk / SOS', value: criticalCount + sosAlerts.length, color: '#EF4444' }
+    { name: 'Safe Students', value: safeStudentCount, color: '#10B981' },
+    { name: 'At-Risk Students', value: atRiskCount, color: '#EF4444' }
   ];
 
-  // Activity Trends (Group by Day)
-  const activityData = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
-    const dayLogs = riskLogs.filter(l => l.day === day);
-    return {
-      name: day,
-      Safe: dayLogs.filter(l => l.severity !== 'High').length,
-      Risk: dayLogs.filter(l => l.severity === 'High').length
-    };
+  const getLast7Days = () => {
+  const days = [];
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push({
+      label: dayNames[d.getDay()], // e.g., "Wed"
+      dateString: d.toLocaleDateString('en-US') // Used for matching logs
+    });
+  }
+  return days;
+};
+
+// 2. Update the Activity Trends data prep
+const activityData = getLast7Days().map(dayObj => {
+  // Filter logs that happened on this specific calendar date
+  const dayLogs = riskLogs.filter(l => {
+    const logDate = l.timestamp?.toDate().toLocaleDateString('en-US');
+    return logDate === dayObj.dateString;
   });
+
+  // Calculate unique headcount for Risk (High severity)
+  const uniqueRiskUsers = [...new Set(
+    dayLogs.filter(l => l.severity === 'High').map(l => l.userId)
+  )].length;
+
+  return {
+    name: dayObj.label, // This shows "Thu", "Fri", etc., ending on Today
+    // Safe count is total students minus those who were risky on THIS day
+    Safe: Math.max(0, studentCount - uniqueRiskUsers),
+    Risk: uniqueRiskUsers
+  };
+});
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader className="animate-spin text-blue-600" size={40} /></div>;
 
@@ -217,10 +260,14 @@ const AdminDashboard = () => {
              <div className="space-y-8 animate-in fade-in">
                 {/* Live Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   <StatCard icon={User} label="Active Students" value={studentCount} color="blue" />
+                   <StatCard icon={User} label="Total Students" value={studentCount} color="blue" />
                    <StatCard icon={Siren} label="Active SOS" value={sosAlerts.length} color="red" pulse={sosAlerts.length > 0} />
-                   <StatCard icon={Activity} label="Risk Incidents" value={criticalCount} color="orange" />
-                   <StatCard icon={CheckCircle} label="Safe Interactions" value={safeCount} color="green" />
+                   
+                   {/* UPDATED: Displays Count of Students At Risk, not total error logs */}
+                   <StatCard icon={Activity} label="At-Risk Students" value={atRiskCount} color="orange" />
+                   
+                   {/* UPDATED: Displays Safe Students */}
+                   <StatCard icon={CheckCircle} label="Safe Students" value={safeStudentCount} color="green" />
                 </div>
 
                 {/* Graphs */}
@@ -253,7 +300,8 @@ const AdminDashboard = () => {
                    </div>
 
                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm">
-                      <h3 className="font-bold mb-4">Risk Distribution</h3>
+                      {/* UPDATED: Graph Title */}
+                      <h3 className="font-bold mb-4">Student Safety Status</h3>
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                            <PieChart>

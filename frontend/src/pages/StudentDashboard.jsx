@@ -76,28 +76,7 @@ const StudentDashboard = () => {
         return;
     }
 
-    try {
-        // Send Critical Alert to Firebase with Student Details
-        await addDoc(collection(db, "safety_alerts"), {
-            message: "CRITICAL SOS BUTTON PRESSED",
-            status: "SOS",
-            timestamp: serverTimestamp(),
-            // Attach details from Profile
-            student: studentProfile?.displayName || user?.displayName || "Unknown Student",
-            email: user?.email,
-            department: studentProfile?.department || "N/A",
-            year: studentProfile?.year || "N/A",
-            section: studentProfile?.section || "N/A"
-        });
-
-        alert("🚨 SOS ALERT SENT! Admin has been notified.");
-        navigate('/emergency'); // Go to emergency page for numbers/location
-
-    } catch (error) {
-        console.error("SOS Error:", error);
-        alert("Error sending alert. Please call emergency services manually.");
-        navigate('/emergency');
-    }
+    
   };
 
   const handleSubmitCheckIn = async () => {
