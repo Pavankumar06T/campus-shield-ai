@@ -8,11 +8,11 @@ const PremiumLoader = () => {
     return (
         <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden transition-colors duration-500 ${darkMode ? 'bg-[#0f172a] text-white' : 'bg-white text-slate-900'}`}>
 
-            {/* Background Glows */}
+            
             <div className={`absolute top-[-20%] left-[-20%] w-[600px] h-[600px] rounded-full blur-[120px] animate-pulse ${darkMode ? 'bg-blue-600/20' : 'bg-blue-400/20'}`}></div>
             <div className={`absolute bottom-[-20%] right-[-20%] w-[600px] h-[600px] rounded-full blur-[120px] animate-pulse delay-1000 ${darkMode ? 'bg-purple-600/20' : 'bg-purple-400/20'}`}></div>
 
-            {/* Animated Logo Container */}
+            
             <div className="relative">
                 <div className={`absolute inset-0 rounded-full blur-xl opacity-20 animate-ping ${darkMode ? 'bg-blue-500' : 'bg-blue-400'}`}></div>
                 <div className={`relative z-10 p-6 backdrop-blur-xl border rounded-3xl shadow-2xl ${darkMode ? 'bg-slate-900/50 border-white/10' : 'bg-white/50 border-slate-200'}`}>
@@ -20,7 +20,7 @@ const PremiumLoader = () => {
                 </div>
             </div>
 
-            {/* Typography */}
+           
             <div className="mt-8 text-center space-y-2 relative z-10">
                 <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 animate-gradient-x">
                     CampusShield AI

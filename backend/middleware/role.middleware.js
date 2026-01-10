@@ -1,5 +1,5 @@
 const checkAdmin = (req, res, next) => {
-  // PROTOTYPE MODIFICATION: Allow any authenticated user to access Admin routes
+  
   if (req.user) {
     next();
   } else {

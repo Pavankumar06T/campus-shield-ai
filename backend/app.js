@@ -6,17 +6,17 @@ require('dotenv').config();
 const studentRoutes = require('./routes/student.routes');
 const adminRoutes = require('./routes/admin.routes'); 
 
-// --- FIXED CORS CONFIGURATION ---
+
 app.use(cors({
-  // Replace '*' with your specific URLs
+  
   origin: [
-    'http://localhost:5173',                   // For local testing
-    'https://campus-shield-ai-tctr.onrender.com' // (Optional) Your live frontend URL
+    'http://localhost:5173',                   
+    'https://campus-shield-ai.web.app/' 
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true 
 }));
-// --------------------------------
+
 
 app.use(express.json());
 

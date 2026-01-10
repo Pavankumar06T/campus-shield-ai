@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../components/ThemeContext';
-import { apiRequest } from '../api'; // Import Integration
-import { useToast } from '../components/ToastContext'; // Import Toast
+import { apiRequest } from '../api'; 
+import { useToast } from '../components/ToastContext'; 
 
 const EmergencyPage = () => {
   const navigate = useNavigate();
   const { darkMode } = useTheme();
-  const { addToast } = useToast(); // Use Toast Hook
+  const { addToast } = useToast(); 
 
   const [location, setLocation] = useState("");
   const [details, setDetails] = useState("");
@@ -23,10 +23,10 @@ const EmergencyPage = () => {
         details: details || "Immediate Assistance Required",
         type: "SOS"
       });
-      addToast("SOS ALERT SENT! Security Team has been notified.", "error"); // Use Toast
+      addToast("SOS ALERT SENT! Security Team has been notified.", "error"); 
       navigate('/student');
     } catch (error) {
-      addToast("Failed to send alert. Please call 112 immediately.", "error"); // Use Toast
+      addToast("Failed to send alert. Please call 112 immediately.", "error"); 
     } finally {
       setLoading(false);
     }

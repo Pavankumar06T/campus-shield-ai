@@ -19,7 +19,7 @@ const LoginPage = () => {
   const [nickname, setNickname] = useState('');
 
   const handleLogin = async () => {
-    // Validation
+   
     if (activeTab === 'student' && !nickname.trim()) {
       addToast("Please enter a Nickname for today!", "warning");
       return;
@@ -32,31 +32,27 @@ const LoginPage = () => {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // 1. FETCH EXISTING USER DATA (Critical Fix)
       const userDocRef = doc(db, "users", user.uid);
       const userDocSnap = await getDoc(userDocRef);
       const existingData = userDocSnap.exists() ? userDocSnap.data() : {};
 
-      // 2. Prepare Update Data
       const updateData = {
         uid: user.uid,
         email: user.email,
         lastLogin: new Date(),
         ...(activeTab === 'student' && {
           nickname: nickname,
-          role: 'student' // Ensure role
+          role: 'student' 
         }),
         ...(activeTab === 'admin' && {
-          role: 'admin' // Prototype convenience
+          role: 'admin' 
         })
       };
 
-      // 3. Merge & Save to Firestore
-      // We merge updateData strictly. We do NOT overwrite name/dept if they exist in `existingData`.
+      
       await setDoc(userDocRef, updateData, { merge: true });
 
-      // 4. Update Local Storage for Instant UI
-      // Combine Existing Firestore Data + New Session Data
+      
       const finalProfile = { ...existingData, ...updateData };
       localStorage.setItem('studentProfile', JSON.stringify(finalProfile));
 

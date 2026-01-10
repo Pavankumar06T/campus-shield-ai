@@ -9,7 +9,7 @@ studentRouter.use(verifyToken);
 studentRouter.use(checkStudent);
 
 
-// Routes
+
 studentRouter.post('/checkin', studentController.submitCheckIn);
 studentRouter.post('/chat', studentController.handleChat);
 studentRouter.post('/emergency', studentController.reportEmergency);

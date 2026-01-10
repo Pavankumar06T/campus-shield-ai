@@ -6,14 +6,9 @@ export const ProtectedRoute = ({ children, allowedRole }) => {
 
  if (loading) return <div>Loading...</div>;
   if (!user) return <Navigate to="/login" />;
- if (allowedRole && role !== allowedRole) return <Navigate to="/login" />; // Or an Unauthorized page
+ if (allowedRole && role !== allowedRole) return <Navigate to="/login" />; 
 
  return children;
 }; 
 
 
-/* Temporary test: Just show the page
-export const ProtectedRoute = ({ children }) => {
-  return children; 
-};
-*/

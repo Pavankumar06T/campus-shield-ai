@@ -9,12 +9,12 @@ import {
 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
-import { db, auth } from '../firebase'; // <--- RESTORED IMPORT
+import { db, auth } from '../firebase';
 import { useToast } from '../components/ToastContext';
 import { generateSafetyReport } from '../utils/generatePDF'; // <--- NEW IMPORT
 import { FileText } from 'lucide-react'; // Import Icon
 
-// --- PRIVACY HELPER: The Core Logic for Requirement #2 ---
+
 const StudentIdentity = ({ student, detail, severity, label }) => {
   // CRITICAL THRESHOLD: Only reveal if severity is High, Critical, or SOS
   const isCritical = ['High', 'Critical', 'SOS', 'Dangerous'].includes(severity);

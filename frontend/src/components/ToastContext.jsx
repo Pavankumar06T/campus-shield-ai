@@ -30,7 +30,7 @@ export const ToastProvider = ({ children }) => {
     return (
         <ToastContext.Provider value={{ addToast, removeToast }}>
             {children}
-            {/* UPDATED: Centered Position */}
+            
             <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-3 pointer-events-none items-center">
                 {toasts.map(toast => (
                     <ToastItem key={toast.id} {...toast} onClose={() => removeToast(toast.id)} />
@@ -41,7 +41,7 @@ export const ToastProvider = ({ children }) => {
 };
 
 const ToastItem = ({ message, type, onClose }) => {
-    // Modern "Surface" Design: Glass background with colored accents
+    
     const styles = {
         success: 'border-l-4 border-l-emerald-500 text-slate-800 dark:text-white',
         error: 'border-l-4 border-l-red-500 text-slate-800 dark:text-white',
