@@ -11,7 +11,7 @@ app.use(cors({
   
   origin: [
     'http://localhost:5173',                   
-    'https://campus-shield-ai.web.app/' 
+    'https://campus-shield-ai.web.app' 
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true 
