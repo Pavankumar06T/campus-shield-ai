@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';
-import { ThemeProvider } from './components/ThemeContext'; // <--- NEW IMPORT
+import { ThemeProvider } from './components/ThemeContext';
+import { ToastProvider } from './components/ToastContext'; // <--- NEW IMPORT
 import { ProtectedRoute } from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
+import RegisterPage from './pages/RegisterPage'; // Import New Page
 import LoginPage from './pages/LoginPage';
 import StudentDashboard from './pages/StudentDashboard';
 import StudentChat from './pages/StudentChat';
@@ -11,42 +13,45 @@ import EmergencyPage from './pages/EmergencyPage';
 
 function App() {
   return (
-    <AuthProvider> 
-      <ThemeProvider> {/* <--- WRAPPER START */}
-        <BrowserRouter> 
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            
-            <Route path="/student" element={
-              <ProtectedRoute allowedRole="student">
-                <StudentDashboard />
-              </ProtectedRoute>
-            } />
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
 
-            <Route path="/student/chat" element={
-              <ProtectedRoute allowedRole="student">
-                <StudentChat />
-              </ProtectedRoute>
-            } />
+              <Route path="/student" element={
+                <ProtectedRoute allowedRole="student">
+                  <StudentDashboard />
+                </ProtectedRoute>
+              } />
 
-            <Route path="/emergency" element={
-              <ProtectedRoute allowedRole="student">
-                <EmergencyPage />
-              </ProtectedRoute>
-            } />
+              <Route path="/student/chat" element={
+                <ProtectedRoute allowedRole="student">
+                  <StudentChat />
+                </ProtectedRoute>
+              } />
 
-            <Route path="/admin" element={
-              <ProtectedRoute allowedRole="admin">
-                <AdminDashboard />
-              </ProtectedRoute>
-            } />
+              <Route path="/emergency" element={
+                <ProtectedRoute allowedRole="student">
+                  <EmergencyPage />
+                </ProtectedRoute>
+              } />
 
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </BrowserRouter>
-      </ThemeProvider> {/* <--- WRAPPER END */}
-    </AuthProvider>
+              <Route path="/admin" element={
+                <ProtectedRoute>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } />
+
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </BrowserRouter>
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

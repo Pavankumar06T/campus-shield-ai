@@ -1,15 +1,13 @@
 const checkAdmin = (req, res, next) => {
-  // Assuming auth.middleware has already decoded the token and added 'user' to req
-  // and that the user object in Firebase has a 'role' field.
-  if (req.user && req.user.role === 'admin') {
+  // PROTOTYPE MODIFICATION: Allow any authenticated user to access Admin routes
+  if (req.user) {
     next();
   } else {
-    return res.status(403).json({ message: "Access denied. Admins only." });
+    return res.status(403).json({ message: "Access denied." });
   }
-
 };
 const checkStudent = (req, res, next) => {
- 
+
   if (req.user && req.user.role === 'student') {
     next();
   } else {
@@ -17,4 +15,4 @@ const checkStudent = (req, res, next) => {
   }
 
 };
-module.exports = { checkAdmin ,checkStudent };
+module.exports = { checkAdmin, checkStudent };
