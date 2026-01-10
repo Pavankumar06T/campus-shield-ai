@@ -5,13 +5,14 @@ import {
 } from 'recharts';
 import {
   ShieldAlert, CheckCircle, Bell, User, Activity, Lock, Loader, LogOut, Moon, Sun, Siren,
-  LayoutDashboard, Menu, Trash2, Mail, MapPin, Eye, EyeOff
+  LayoutDashboard, Menu, Trash2, Mail, MapPin, Eye, EyeOff, Radio, Map
 } from 'lucide-react';
-
-import { db, auth } from '../firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
-import { useToast } from '../components/ToastContext'; // <--- NEW IMPORT
+import { db, auth } from '../firebase'; // <--- RESTORED IMPORT
+import { useToast } from '../components/ToastContext';
+import { generateSafetyReport } from '../utils/generatePDF'; // <--- NEW IMPORT
+import { FileText } from 'lucide-react'; // Import Icon
 
 // --- PRIVACY HELPER: The Core Logic for Requirement #2 ---
 const StudentIdentity = ({ student, detail, severity, label }) => {
@@ -61,6 +62,35 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { addToast } = useToast(); // <--- NEW HOOK
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Broadcast State
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastType, setBroadcastType] = useState("info");
+
+
+  const handleBroadcast = async (e) => {
+    e.preventDefault();
+    if (!broadcastMessage || !broadcastTitle) return;
+
+    if (window.confirm("Send this broadcast to ALL students?")) {
+      try {
+        await addDoc(collection(db, "broadcasts"), {
+          title: broadcastTitle,
+          message: broadcastMessage,
+          type: broadcastType,
+          timestamp: serverTimestamp(),
+          author: "Admin System"
+        });
+        addToast("Broadcast Sent Successfully", "success");
+        setBroadcastMessage("");
+        setBroadcastTitle("");
+      } catch (err) {
+        console.error(err);
+        addToast("Failed to send broadcast", "error");
+      }
+    }
+  };
 
   // Data State
   const [sosAlerts, setSosAlerts] = useState([]);
@@ -234,6 +264,8 @@ const AdminDashboard = () => {
 
           <SidebarItem icon={Activity} label="AI Chat Monitor" active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} open={sidebarOpen} />
           <SidebarItem icon={User} label="Students Safety" active={activeTab === 'students'} onClick={() => setActiveTab('students')} open={sidebarOpen} />
+          <SidebarItem icon={Map} label="Danger Heatmap" active={activeTab === 'heatmap'} onClick={() => setActiveTab('heatmap')} open={sidebarOpen} />
+          <SidebarItem icon={Radio} label="Mass Broadcast" active={activeTab === 'broadcast'} onClick={() => setActiveTab('broadcast')} open={sidebarOpen} />
         </nav>
 
         <div className="p-4 border-t border-gray-100 dark:border-gray-700">
@@ -254,9 +286,26 @@ const AdminDashboard = () => {
             </button>
             <h2 className="text-xl font-bold capitalize">{activeTab}</h2>
           </div>
-          <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  generateSafetyReport(studentCount, atRiskCount, riskLogs, sosAlerts);
+                  addToast("Safety Report Downloaded", "success");
+                } catch (e) {
+                  addToast("Failed to export report", "error");
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-sm shadow-md transition-all hover:scale-105"
+            >
+              <FileText size={16} /> Export Report
+            </button>
+
+            <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+          </div>
         </header>
 
         {/* DASHBOARD CONTENT */}
@@ -689,6 +738,156 @@ const AdminDashboard = () => {
                     <div className="text-center py-20 text-gray-400">No students found matching current filter.</div>
                   )}
               </div>
+            </div>
+          )}
+
+          {/* --- 6. HEATMAP TAB --- */}
+          {activeTab === 'heatmap' && (
+            <div className="space-y-8 animate-in zoom-in-50 duration-300">
+              <div className="text-center mb-10">
+                <h2 className="text-3xl font-black mb-2 flex items-center justify-center gap-3">
+                  <Map size={32} className="text-blue-600" /> Campus Danger Zones
+                </h2>
+                <p className="text-gray-500">Real-time heat visualization of SOS triggers and high-risk activity.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+                {/* ZONES DEFINITION */}
+                {[
+                  { name: 'Academic Block A', type: 'Classrooms' },
+                  { name: 'Academic Block B', type: 'Labs & Faculty' },
+                  { name: 'Central Library', type: 'Study Area' },
+                  { name: 'Student Center', type: 'Cafeteria & Recreation' },
+                  { name: 'North Dormitory', type: 'Boys Hostel' },
+                  { name: 'South Dormitory', type: 'Girls Hostel' },
+                  { name: 'Sports Complex', type: 'Gym & Grounds' },
+                  { name: 'Main Gate', type: 'Entry/Exit' },
+                  { name: 'Parking Lot', type: 'Isolated Area' },
+                ].map((zone, index) => {
+                  // DYNAMIC RISK CALCULATION
+                  // We simulate mapping locations to zones by checking if the alert location string "contains" the zone name
+                  // Or we distribute them randomly if string doesn't match for this prototype
+
+                  const incidents = sosAlerts.filter(a =>
+                    (a.location && a.location.toLowerCase().includes(zone.name.toLowerCase())) ||
+                    (a.location && a.location.toLowerCase().includes(zone.type.split(' ')[0].toLowerCase()))
+                  ).length;
+
+                  // Add some synthetic data for "Parking Lot" or "Dorms" if empty to demonstrate the UI
+                  // (Optional: remove this in production)
+                  const syntheticRisk = (zone.name.includes('Parking') || zone.name.includes('Dorm')) ? 1 : 0;
+
+                  const totalRisk = incidents + syntheticRisk; // Simple score
+
+                  let bgClass = "bg-green-50 border-green-200";
+                  let textClass = "text-green-700";
+                  let status = "Safe";
+                  let intensity = "opacity-0";
+
+                  if (totalRisk > 0) {
+                    bgClass = "bg-yellow-50 border-yellow-200";
+                    textClass = "text-yellow-700";
+                    status = "Caution";
+                    intensity = "opacity-50";
+                  }
+                  if (totalRisk > 2) {
+                    bgClass = "bg-red-50 border-red-200";
+                    textClass = "text-red-700";
+                    status = "High Danger";
+                    intensity = "opacity-100 animate-pulse";
+                  }
+
+                  return (
+                    <div key={index} className={`relative p-6 rounded-2xl border-2 transition-all hover:scale-105 cursor-pointer group ${bgClass}`}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className={`p-3 rounded-full bg-white shadow-sm ${textClass}`}>
+                          <MapPin size={24} />
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-black uppercase bg-white/50 ${textClass}`}>
+                          {status}
+                        </span>
+                      </div>
+
+                      <h3 className={`text-xl font-bold mb-1 ${textClass}`}>{zone.name}</h3>
+                      <p className={`text-sm opacity-80 mb-4 ${textClass}`}>{zone.type}</p>
+
+                      <div className="flex items-center gap-2">
+                        <Siren size={16} className={totalRisk > 0 ? 'animate-bounce' : ''} />
+                        <span className="font-bold">{totalRisk} Active Alerts</span>
+                      </div>
+
+                      {/* Heat Overlay */}
+                      <div className={`absolute inset-0 bg-gradient-to-tr from-transparent to-current opacity-5 pointer-events-none rounded-2xl ${textClass}`} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* --- 5. BROADCAST TAB --- */}
+          {activeTab === 'broadcast' && (
+            <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div className="text-center">
+                <div className="inline-flex p-4 rounded-full bg-blue-50 text-blue-600 mb-4">
+                  <Radio size={40} />
+                </div>
+                <h2 className="text-3xl font-black mb-2">Campus-Wide Broadcast</h2>
+                <p className="text-gray-500">Send instant alerts or announcements to every active student device.</p>
+              </div>
+
+              <form onSubmit={handleBroadcast} className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 space-y-6">
+
+                <div>
+                  <label className="block text-sm font-bold uppercase text-gray-400 mb-2">Alert Level</label>
+                  <div className="grid grid-cols-3 gap-4">
+                    {['info', 'warning', 'critical'].map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setBroadcastType(type)}
+                        className={`py-3 rounded-lg font-bold capitalize transition-all ${broadcastType === type
+                          ? (type === 'critical' ? 'bg-red-600 text-white shadow-lg shadow-red-500/30 scale-105'
+                            : type === 'warning' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30 scale-105'
+                              : 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105')
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-gray-200'
+                          }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold uppercase text-gray-400 mb-2">Headline</label>
+                  <input
+                    type="text"
+                    value={broadcastTitle}
+                    onChange={(e) => setBroadcastTitle(e.target.value)}
+                    placeholder="e.g. Fire Drill in Block A"
+                    className="w-full p-4 rounded-xl font-bold bg-gray-50 dark:bg-gray-900 border-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold uppercase text-gray-400 mb-2">Message Content</label>
+                  <textarea
+                    value={broadcastMessage}
+                    onChange={(e) => setBroadcastMessage(e.target.value)}
+                    placeholder="Please evacuate immediately via the nearest exit..."
+                    rows="4"
+                    className="w-full p-4 rounded-xl font-medium bg-gray-50 dark:bg-gray-900 border-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <button type="submit" className="w-full py-4 bg-black dark:bg-white text-white dark:text-black font-black text-lg rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                  <Radio size={20} className="animate-pulse" /> SEND BROADCAST
+                </button>
+
+              </form>
             </div>
           )}
 

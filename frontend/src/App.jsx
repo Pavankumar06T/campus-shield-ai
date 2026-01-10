@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';
 import { ThemeProvider } from './components/ThemeContext';
-import { ToastProvider } from './components/ToastContext'; // <--- NEW IMPORT
+import { ToastProvider } from './components/ToastContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import GlobalListeners from './components/GlobalListeners';
+
 import LandingPage from './pages/LandingPage';
-import RegisterPage from './pages/RegisterPage'; // Import New Page
+import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import StudentDashboard from './pages/StudentDashboard';
 import StudentChat from './pages/StudentChat';
@@ -16,6 +18,7 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <ToastProvider>
+          <GlobalListeners />
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<LandingPage />} />

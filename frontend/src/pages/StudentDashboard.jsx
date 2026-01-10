@@ -8,8 +8,10 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageCircle, Phone, LogOut, Activity, ArrowRight, ShieldCheck,
-  Sun, Moon, CloudSun, Sparkles, Zap, Quote
+  Sun, Moon, CloudSun, Sparkles, Zap, Quote, Mic
 } from 'lucide-react';
+import { useSpeechSOS } from '../hooks/useSpeechSOS';
+import { useToast } from '../components/ToastContext'; // Use new Toast system
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -71,6 +73,15 @@ const StudentDashboard = () => {
     navigate('/');
   };
 
+  const { addToast } = useToast();
+
+  const handleVoiceTrigger = (word) => {
+    addToast(`Voice Alert Triggered: "${word}"`, 'error');
+    navigate('/emergency'); // Immediate redirect to SOS flow
+  };
+
+  const { isListening, startListening, stopListening } = useSpeechSOS(handleVoiceTrigger);
+
   // --- SOS FUNCTIONALITY ---
   const handleSOSClick = () => {
     // Navigate to the dedicated Emergency Page to Confirm Details & Location
@@ -83,11 +94,11 @@ const StudentDashboard = () => {
       await apiRequest('/student/checkin', 'POST', {
         mood, stress, sleep, academic, social, journalEntry
       });
-      alert("Check-in saved!");
+      addToast("Check-in saved successfully!", "success");
       setShowCheckIn(false);
     } catch (error) {
       console.error(error);
-      alert("Failed to save check-in.");
+      addToast("Failed to save check-in.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -221,7 +232,8 @@ const StudentDashboard = () => {
           </div>
 
           {/* SOS BUTTON - NOW CONNECTED TO FIREBASE */}
-          <div className="md:col-span-12">
+          {/* SOS BUTTON - NOW CONNECTED TO FIREBASE */}
+          <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6">
             <button onClick={handleSOSClick} className="w-full group relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-red-500 to-rose-600 p-1 shadow-xl shadow-red-500/20 transition-all hover:scale-[1.01]">
               <div className={`relative flex items-center justify-between rounded-[1.8rem] px-8 py-6 transition-all ${darkMode ? 'bg-slate-900/90 group-hover:bg-slate-900/0' : 'bg-white group-hover:bg-white/10'}`}>
                 <div className="flex items-center gap-6">
@@ -238,6 +250,20 @@ const StudentDashboard = () => {
                 <div className="hidden md:flex h-12 w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                   <ArrowRight className="text-white" />
                 </div>
+              </div>
+            </button>
+
+            {/* VOICE SOS TOGGLE */}
+            <button
+              onClick={isListening ? stopListening : startListening}
+              className={`relative overflow-hidden rounded-[2rem] p-1 shadow-xl transition-all hover:scale-105 ${isListening ? 'bg-gradient-to-r from-red-500 to-orange-500 shadow-red-500/20' : 'bg-slate-200 dark:bg-slate-800'}`}
+            >
+              <div className={`h-full flex flex-col items-center justify-center rounded-[1.8rem] px-8 py-4 min-w-[140px] transition-all ${isListening ? 'bg-transparent text-white' : 'bg-white dark:bg-slate-900 text-slate-500'}`}>
+                <Mic size={32} className={isListening ? 'animate-bounce' : ''} />
+                <span className="text-xs font-bold uppercase tracking-wider mt-2">
+                  {isListening ? 'Listening...' : 'Enable Voice'}
+                </span>
+                {isListening && <div className="absolute inset-0 bg-white/20 animate-pulse rounded-[2rem]"></div>}
               </div>
             </button>
           </div>

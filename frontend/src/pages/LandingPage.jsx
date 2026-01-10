@@ -1,15 +1,86 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../components/ThemeContext';
-import { Shield, MessageCircle, Activity, Lock, Users, ArrowRight, Bell, Menu, X, CheckCircle, Sun, Moon, Sparkles, Heart } from 'lucide-react';
+import { Shield, MessageCircle, Activity, Lock, Users, ArrowRight, Bell, Menu, X, CheckCircle, Sun, Moon, Sparkles, Heart, Download } from 'lucide-react';
 
 const LandingPage = () => {
   const navigate = useNavigate();
   const { darkMode, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  React.useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      // Show custom instruction modal instead of alert
+      setShowInstallModal(true);
+    }
+  };
 
   return (
     <div className={`min-h-screen font-sans transition-colors duration-500 selection:bg-blue-500 selection:text-white ${darkMode ? 'bg-[#0f172a] text-white' : 'bg-[#fafafa] text-slate-900'}`}>
+
+      {/* --- INSTALL INSTRUCTION MODAL --- */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className={`relative max-w-md w-full p-8 rounded-3xl shadow-2xl ${darkMode ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}>
+            <button onClick={() => setShowInstallModal(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition">
+              <X size={20} />
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Download size={32} />
+              </div>
+              <h3 className="text-2xl font-bold mb-2">Install App</h3>
+              <p className="text-sm opacity-70">Get the best experience by installing Campus Shield on your device.</p>
+            </div>
+
+            <div className={`space-y-4 text-left p-4 rounded-xl ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+              <div className="flex items-start gap-3">
+                <div className="mt-1 font-bold text-blue-500">1.</div>
+                <div>
+                  <p className="font-bold text-sm">Review URL Bar</p>
+                  <p className="text-xs opacity-70">Look for the <span className="inline-block border rounded px-1 text-[10px]">🖥️ Install</span> icon on the right side of your browser address bar.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="mt-1 font-bold text-blue-500">2.</div>
+                <div>
+                  <p className="font-bold text-sm">Already Installed?</p>
+                  <p className="text-xs opacity-70">If the icon is missing, you might already have the app installed! Check your desktop or apps menu.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="mt-1 font-bold text-blue-500">3.</div>
+                <div>
+                  <p className="font-bold text-sm">Browser Menu</p>
+                  <p className="text-xs opacity-70">Alternatively, click the browser menu (⋮) &rarr; "Cast, save, and share" &rarr; "Install CampusShield".</p>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => setShowInstallModal(false)} className="w-full mt-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition">
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- BACKGROUND ACCENTS --- */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -41,6 +112,15 @@ const LandingPage = () => {
               {darkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
             <div className={`h-8 w-[1px] ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}></div>
+
+            {/* INSTALL APP BUTTON (Always Visible for user clarity) */}
+            <button
+              onClick={handleInstallClick}
+              className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-full border transition-all ${darkMode ? 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10' : 'border-blue-100 text-blue-600 hover:bg-blue-50'}`}
+            >
+              <Download size={16} /> Install App
+            </button>
+
             <button
               onClick={() => navigate('/login')}
               className={`text-sm font-bold transition-colors ${darkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-blue-600'}`}

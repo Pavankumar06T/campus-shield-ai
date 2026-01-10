@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../components/ThemeContext';
 import { apiRequest } from '../api'; // Import Integration
-import { Phone, ArrowLeft, AlertTriangle, ShieldAlert, BadgeInfo, MapPin, FileText } from 'lucide-react';
+import { useToast } from '../components/ToastContext'; // Import Toast
 
 const EmergencyPage = () => {
   const navigate = useNavigate();
   const { darkMode } = useTheme();
+  const { addToast } = useToast(); // Use Toast Hook
 
   const [location, setLocation] = useState("");
   const [details, setDetails] = useState("");
@@ -22,10 +23,10 @@ const EmergencyPage = () => {
         details: details || "Immediate Assistance Required",
         type: "SOS"
       });
-      alert("SOS ALERT SENT! Security Team has been notified.");
+      addToast("SOS ALERT SENT! Security Team has been notified.", "error"); // Use Toast
       navigate('/student');
     } catch (error) {
-      alert("Failed to send alert. Please call 112 immediately.");
+      addToast("Failed to send alert. Please call 112 immediately.", "error"); // Use Toast
     } finally {
       setLoading(false);
     }
@@ -58,7 +59,7 @@ const EmergencyPage = () => {
                     if (navigator.geolocation) {
                       navigator.geolocation.getCurrentPosition(
                         (pos) => setLocation(`GPS: ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`),
-                        () => alert("GPS Permission Denied. Please type location.")
+                        () => addToast("GPS Permission Denied. Please type location.", "error")
                       );
                     }
                   }}
