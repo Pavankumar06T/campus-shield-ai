@@ -6,7 +6,7 @@ export const useSpeechSOS = (triggerSOSCallback) => {
     const recognitionRef = useRef(null);
 
     useEffect(() => {
-        // Browser Support Check
+       
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) return;
 
@@ -20,16 +20,14 @@ export const useSpeechSOS = (triggerSOSCallback) => {
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 currentTranscript += event.results[i][0].transcript;
             }
-            // Only process if we are actually supposed to be listening
-            // This prevents "ghost" listeners from previous renders
+            
             if (isListening) {
                 checkKeywords(currentTranscript);
             }
         };
 
         recognition.onend = () => {
-            // ONLY restart if the USER explicitly wanted it to be listening
-            // and didn't press stop.
+            
             if (isListening) {
                 try {
                     recognition.start();
@@ -39,7 +37,7 @@ export const useSpeechSOS = (triggerSOSCallback) => {
 
         recognitionRef.current = recognition;
 
-        // If 'isListening' became true, start it.
+        
         if (isListening) {
             try {
                 recognition.start();
@@ -62,8 +60,8 @@ export const useSpeechSOS = (triggerSOSCallback) => {
         const detected = safeWords.find(word => upperText.includes(word));
         if (detected) {
             console.log(`Voice SOS Triggered by: ${detected}`);
-            triggerSOSCallback(detected); // Pass the trigger word
-            stopListening(); // Stop after trigger to prevent spam
+            triggerSOSCallback(detected); 
+            stopListening(); 
         }
     };
 

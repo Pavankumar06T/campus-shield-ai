@@ -45,7 +45,7 @@ const RegisterPage = () => {
             const userProfile = {
                 uid: user.uid,
                 email: user.email,
-                displayName: formData.name, // Full Name from input
+                displayName: formData.name, 
                 department: formData.department,
                 year: formData.year,
                 section: formData.section,
@@ -56,11 +56,9 @@ const RegisterPage = () => {
             };
 
             localStorage.setItem('studentProfile', JSON.stringify(userProfile));
-            // MERGE true allows updating existing users without wiping other fields, 
-            // but here we intend to set the baseline profile.
+           
             await setDoc(doc(db, "users", user.uid), userProfile, { merge: true });
 
-            // Redirect to Student Dashboard
             window.location.href = '/student';
 
         } catch (error) {
@@ -200,7 +198,7 @@ const RegisterPage = () => {
     );
 };
 
-// Reusable Input Component
+
 const InputField = ({ icon: Icon, name, placeholder, value, onChange, darkMode }) => (
     <div className="relative group">
         {Icon && <Icon className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${darkMode ? 'text-slate-500 group-focus-within:text-indigo-400' : 'text-slate-400 group-focus-within:text-indigo-600'}`} />}

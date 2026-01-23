@@ -3,7 +3,7 @@ import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-import PremiumLoader from './PremiumLoader'; // Import Loader
+import PremiumLoader from './PremiumLoader'; 
 
 const AuthContext = createContext();
 

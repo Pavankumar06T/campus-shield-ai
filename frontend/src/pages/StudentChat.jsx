@@ -15,7 +15,7 @@ const StudentChat = () => {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
-  // Auto-scroll to bottom
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
@@ -23,17 +23,17 @@ const StudentChat = () => {
   const handleSend = async () => {
     if (!input.trim()) return;
     
-    // 1. Add User Message
+
     const userMsg = { id: Date.now(), sender: 'user', text: input };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setIsTyping(true);
 
     try {
-      // 2. Call Backend
+      
       const data = await apiRequest('/student/chat', 'POST', { message: userMsg.text });
       
-      // 3. Add AI Response
+      
       if (data && data.reply) {
         setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'ai', text: data.reply }]);
       } else {

@@ -27,7 +27,7 @@ const LandingPage = () => {
         setDeferredPrompt(null);
       }
     } else {
-      // Show custom instruction modal instead of alert
+      
       setShowInstallModal(true);
     }
   };

@@ -1,7 +1,7 @@
 import { auth } from './firebase';
 
-//const API_BASE_URL = "https://campus-shield-ai-tctr.onrender.com/api"; // Matches backend port
-const API_BASE_URL ="http://localhost:5000/api"
+const API_BASE_URL = "https://campus-shield-ai-tctr.onrender.com/api"; 
+
 
 export const apiRequest = async (endpoint, method = "GET", body = null) => {
   try {

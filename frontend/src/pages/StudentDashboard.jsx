@@ -11,7 +11,7 @@ import {
   Sun, Moon, CloudSun, Sparkles, Zap, Quote, Mic
 } from 'lucide-react';
 import { useSpeechSOS } from '../hooks/useSpeechSOS';
-import { useToast } from '../components/ToastContext'; // Use new Toast system
+import { useToast } from '../components/ToastContext'; 
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -23,7 +23,7 @@ const StudentDashboard = () => {
   const [streak, setStreak] = useState(1);
   const [studentProfile, setStudentProfile] = useState(null);
 
-  // Form Data
+
   const [mood, setMood] = useState(3);
   const [stress, setStress] = useState(3);
   const [sleep, setSleep] = useState(3);
@@ -33,19 +33,19 @@ const StudentDashboard = () => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    // 1. Set Greeting
+    
     const hour = new Date().getHours();
     if (hour < 12) setGreeting("Good Morning");
     else if (hour < 18) setGreeting("Good Afternoon");
     else setGreeting("Good Evening");
 
-    // 2. Load Student Profile from Local Storage (Saved during Login)
+    
     const storedProfile = localStorage.getItem('studentProfile');
     if (storedProfile) {
       setStudentProfile(JSON.parse(storedProfile));
     }
 
-    // 3. Streak Logic
+
     const checkStreak = () => {
       const today = new Date().toDateString();
       const lastLogin = localStorage.getItem('lastLoginDate');
@@ -69,7 +69,7 @@ const StudentDashboard = () => {
 
   const handleLogout = async () => {
     await signOut(auth);
-    localStorage.removeItem('studentProfile'); // Clear profile on logout
+    localStorage.removeItem('studentProfile'); 
     navigate('/');
   };
 
@@ -77,14 +77,14 @@ const StudentDashboard = () => {
 
   const handleVoiceTrigger = (word) => {
     addToast(`Voice Alert Triggered: "${word}"`, 'error');
-    navigate('/emergency'); // Immediate redirect to SOS flow
+    navigate('/emergency'); 
   };
 
   const { isListening, startListening, stopListening } = useSpeechSOS(handleVoiceTrigger);
 
-  // --- SOS FUNCTIONALITY ---
+  
   const handleSOSClick = () => {
-    // Navigate to the dedicated Emergency Page to Confirm Details & Location
+    
     navigate('/emergency');
   };
 
@@ -274,7 +274,7 @@ const StudentDashboard = () => {
   );
 };
 
-// Simple Slider
+
 const Slider = ({ label, value, setValue, min, max, color, darkMode }) => (
   <div>
     <div className="flex justify-between mb-2 text-xs font-bold uppercase tracking-wide">

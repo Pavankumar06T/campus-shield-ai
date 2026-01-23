@@ -5,9 +5,9 @@ export const generateSafetyReport = (studentCount, atRiskCount, riskLogs, sosAle
     try {
         const doc = new jsPDF();
 
-        // --- HEADER ---
+   
         doc.setFontSize(22);
-        doc.setTextColor(41, 128, 185); // Blue
+        doc.setTextColor(41, 128, 185); 
         doc.text("Campus Shield - Safety Audit Report", 14, 20);
 
         doc.setFontSize(10);
@@ -15,7 +15,7 @@ export const generateSafetyReport = (studentCount, atRiskCount, riskLogs, sosAle
         doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
         doc.text(`Authorized By: Admin System`, 14, 33);
 
-        // --- EXECUTIVE SUMMARY ---
+        
         doc.setFillColor(240, 240, 240);
         doc.rect(14, 40, 180, 25, 'F');
 
@@ -33,12 +33,12 @@ export const generateSafetyReport = (studentCount, atRiskCount, riskLogs, sosAle
         doc.setTextColor(200, 0, 0); // Red
         doc.text(`At High Risk: ${atRiskCount}`, 140, 58);
 
-        // --- RISK ANALYSIS TABLE ---
+        
         doc.setFontSize(14);
         doc.setTextColor(0);
         doc.text("High Risk Analysis (Privacy Mode Active)", 14, 80);
 
-        // Prepare Data: Group logs by User
+        
         const riskGroups = Object.values(riskLogs.reduce((acc, log) => {
             if (!acc[log.userId]) {
                 acc[log.userId] = {
@@ -56,7 +56,7 @@ export const generateSafetyReport = (studentCount, atRiskCount, riskLogs, sosAle
 
         const riskTableData = riskGroups.map(g => [
             g.severity === 'Critical' ? 'CRITICAL' : 'High Risk',
-            g.name, // In a real report, we might want to redact this if exporting for external use
+            g.name, 
             `${g.count} Anomalies Detected`,
             new Date(g.lastSeen?.seconds ? g.lastSeen.seconds * 1000 : Date.now()).toLocaleDateString()
         ]);
@@ -75,8 +75,6 @@ export const generateSafetyReport = (studentCount, atRiskCount, riskLogs, sosAle
             doc.text("No high-risk anomalies detected in the recorded period.", 14, 90);
         }
 
-        // --- RECENT SOS ALERTS ---
-        // Use lastAutoTable.finalY from the doc object attached by autoTable
         const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 15 : 100;
         doc.setFontSize(14);
         doc.text("Recent Emergency Alerts (SOS)", 14, finalY);
@@ -102,11 +100,11 @@ export const generateSafetyReport = (studentCount, atRiskCount, riskLogs, sosAle
             doc.text("No recent SOS alerts.", 14, finalY + 10);
         }
 
-        // --- SAVE ---
+        
         doc.save(`CampusShield_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
-        return true; // Success
+        return true; 
     } catch (error) {
         console.error("PDF Generation Error:", error);
-        throw error; // Propagate error to caller (AdminDashboard) to handle with Toast
+        throw error; 
     }
 };
